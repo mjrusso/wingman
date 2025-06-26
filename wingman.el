@@ -1,10 +1,11 @@
-;;; wingman.el --- LLM-assisted code/text completion using llama.cpp -*- lexical-binding:t -*-
+;;; wingman.el --- LLM-assisted code/text completion using llama.cpp -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2025 Michael Russo
 
 ;; Author: Michael Russo
 ;; URL: https://github.com/mjrusso/wingman
-;; Package-Requires: ((emacs "27.1") (request "0.3.2")  (dash "2.19"))
+;; Package-Requires: ((emacs "27.1") (request "0.3.2") (dash "2.19.0"))
+
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
