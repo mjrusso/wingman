@@ -74,8 +74,10 @@ An example of a more advanced configuration:
 
   (setq wingman-log-level 4)
   (setq wingman-key-accept-full (kbd "TAB"))
-  (setq wingman-llama-endpoint "http://127.0.0.1:8080/infill")
   (setq wingman-ring-n-chunks 16)
+
+  ;; default llama.cpp server port is 8012
+  (setq wingman-llama-endpoint "http://127.0.0.1:8080/infill")
 
   ;; assumes use of Modus Themes; substitute with preferred color scheme
   (set-face-attribute 'wingman-overlay-face nil
