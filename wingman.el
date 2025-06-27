@@ -77,8 +77,36 @@
   "Do not trigger auto FIM if there are more than this many chars to the right of point."
   :type 'integer)
 
+(defconst wingman--default-disable-predicates
+  '(;; Disable in magit buffers, which are highly specialized.
+    (lambda () (derived-mode-p 'magit-mode))
+    ;; Disable in terminal emulator buffers.
+    (lambda () (or (derived-mode-p 'vterm-mode)
+                   (derived-mode-p 'shell-mode)
+                   (derived-mode-p 'term-mode)
+                   (derived-mode-p 'eshell-mode)))
+    ;; Disable in special Emacs buffers that typically start with a "*".
+    (lambda () (string-prefix-p "*" (buffer-name)))
+    ;; Disable in read-only buffers where the user can't insert text anyway.
+    (lambda () buffer-read-only)
+    ;; Disable in help, info, and man page buffers.
+    (lambda () (or (derived-mode-p 'help-mode)
+                   (derived-mode-p 'Info-mode)
+                   (derived-mode-p 'man-mode)))
+    ;; Disable in compilation output buffers.
+    (lambda () (derived-mode-p 'compilation-mode)))
+  "A list of default predicates to decide whether `wingman-mode' should be disabled.
+This is an internal variable. Users should customize `wingman-disable-predicates`
+to add their own rules.")
+
+
 (defcustom wingman-disable-predicates nil
   "A list of predicates to decide whether `wingman-mode' should be disabled.
+
+This is checked in addition to a set of built-in predicates that disable
+wingman in common non-editing buffers (e.g., Magit, vterm, read-only
+buffers, etc.).
+
 Each element must be a function that takes no arguments. If any
 function in the list returns a non-nil value when called in a
 buffer, `wingman-mode' will be disabled for that buffer.
@@ -199,9 +227,10 @@ For example:
     (setq wingman--ring-timer nil)))
 
 (defun wingman--should-be-disabled-p ()
-  "Return t if any predicate in `wingman-disable-predicates' is true."
+  "Return t if any built-in or user-defined disable predicate is true."
   (let ((inhibit-message t))
-    (cl-some #'funcall wingman-disable-predicates)))
+    (or (cl-some #'funcall wingman--default-disable-predicates)
+        (cl-some #'funcall wingman-disable-predicates))))
 
 (defun wingman--pick-chunk-on-save ()
   "Hook function for `after-save-hook' to pick a chunk."
@@ -227,7 +256,7 @@ For example:
   (if wingman-mode
       (if (wingman--should-be-disabled-p)
           (progn
-            (message "wingman-mode: Disabled in this buffer due to user configuration.")
+            (message "wingman-mode: Disabled in this buffer due to configuration.")
             (wingman-mode -1))
         (progn
           (cl-pushnew (current-buffer) wingman--active-buffers)
