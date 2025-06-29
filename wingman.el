@@ -421,12 +421,12 @@ the `wingman-mode-map' map."
       (if-let ((cached (wingman--cache-get hash)))
           (progn
             (wingman--log 2 "Cache HIT for hash %s" (substring hash 0 8))
-            (wingman--render cached indent))
+            (wingman--render cached indent (current-buffer)))
         (progn
           (wingman--log 2 "Cache MISS for hash %s - making HTTP request" (substring hash 0 8))
-          (wingman--http-request ctx indent (list hash)))))))
+          (wingman--http-request ctx indent (list hash) (current-buffer)))))))
 
-(defun wingman--http-request (ctx indent hashes)
+(defun wingman--http-request (ctx indent hashes origin-buffer)
   "Send asynchronous HTTP request; store HANDLE in `wingman--current-request'."
   (wingman--log 2 "HTTP → prefix:%d chars, suffix:%d chars, hashes:%d"
                 (length (alist-get 'prefix ctx))
@@ -467,11 +467,22 @@ the `wingman-mode-map' map."
             :parser 'buffer-string
             :success (cl-function
                       (lambda (&key data &allow-other-keys)
-                        (wingman--log 2 "HTTP ← %d bytes, caching under %d hashes"
-                                      (length data) (length hashes))
-                        (dolist (h hashes)
-                          (wingman--cache-put h data))
-                        (wingman--render data indent)))
+                        (if (and (buffer-live-p origin-buffer)
+                                 (eq (current-buffer) origin-buffer))
+                            (progn
+                              (wingman--log 2 "HTTP ← %d bytes, caching under %d hashes"
+                                            (length data) (length hashes))
+                              (dolist (h hashes)
+                                (wingman--cache-put h data))
+                              (wingman--render data indent origin-buffer))
+                          (cond
+                           ((not (buffer-live-p origin-buffer))
+                            (wingman--log 3 "Ignoring stale completion: origin buffer '%s' was killed."
+                                          (buffer-name origin-buffer)))
+                           ((not (eq (current-buffer) origin-buffer))
+                            (wingman--log 3 "Ignoring stale completion: buffer changed from '%s' to '%s'."
+                                          (buffer-name origin-buffer)
+                                          (buffer-name (current-buffer))))))))
             :error (cl-function
                     (lambda (&rest args &key error-thrown &allow-other-keys)
                       (wingman--log 1 "HTTP ERROR: %S" error-thrown)))
@@ -495,7 +506,7 @@ the `wingman-mode-map' map."
                  ("filename" . ,(wingman--chunk-filename c))))
              project-chunks))))
 
-(defun wingman--render (raw indent)
+(defun wingman--render (raw indent buf)
   "Display RAW JSON as ghost text overlay, handling partial text."
   (cl-block wingman--render
     (let ((resp (ignore-errors (json-read-from-string raw))))
@@ -504,8 +515,7 @@ the `wingman-mode-map' map."
         (cl-return-from wingman--render))
 
       (let* ((content-text (alist-get 'content resp ""))
-             (content-lines (split-string content-text "\n"))
-             (buf (current-buffer)))
+             (content-lines (split-string content-text "\n")))
 
         (while (and content-lines (string-empty-p (car (last content-lines))))
           (setq content-lines (butlast content-lines)))
