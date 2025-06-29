@@ -1,0 +1,7 @@
+#+title: wingman.el - Changelog
+#+author: Michael Russo
+#+language: en
+
+* Version 0.1 (2025-06-27)
+
+- Initial release
