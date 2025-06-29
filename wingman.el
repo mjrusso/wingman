@@ -205,6 +205,8 @@ For example:
 (defvar-local wingman--debounce-timer nil "Timer for debouncing auto-FIM requests.")
 (defvar-local wingman--last-move-time (current-time))
 
+(defvar-local wingman--content-lines nil "Content lines most recently completed from the server.")
+
 (defconst wingman--marker "Î") ;; same Unicode char used in llama.vim
 
 (defvar wingman--active-buffers nil
@@ -246,6 +248,14 @@ For example:
       (define-key m wingman-key-trigger #'wingman-fim-inline))
     m)
   "Local map for wingman-mode.")
+
+(defvar wingman-mode-completion-transient-map
+  (let ((m (make-sparse-keymap)))
+    (define-key m wingman-key-accept-full #'wingman-accept-full)
+    (define-key m wingman-key-accept-line #'wingman-accept-line)
+    (define-key m wingman-key-accept-word #'wingman-accept-word)
+    m)
+  "Local map for wingman-mode while there is an active completion.")
 
 ;;;###autoload
 (define-minor-mode wingman-mode
@@ -556,12 +566,8 @@ For example:
                 (overlay-put multi-ov 'after-string multi-display)
                 (overlay-put multi-ov 'wingman t)
                 (setq wingman--info-overlay multi-ov)))
-
-            (let ((map (make-sparse-keymap)))
-              (define-key map wingman-key-accept-full  (lambda () (interactive) (wingman--accept content-lines 'full)))
-              (define-key map wingman-key-accept-line  (lambda () (interactive) (wingman--accept content-lines 'line)))
-              (define-key map wingman-key-accept-word  (lambda () (interactive) (wingman--accept content-lines 'word)))
-              (set-transient-map map t))))))))
+            (setq wingman--content-lines content-lines)
+            (set-transient-map wingman-mode-completion-transient-map t)))))))
 
 (defun wingman-hide ()
   "Clear existing hint overlays and detach accept keys."
@@ -571,27 +577,48 @@ For example:
     (setq wingman--hint-overlay nil))
   (when (overlayp wingman--info-overlay)
     (delete-overlay wingman--info-overlay)
-    (setq wingman--info-overlay nil)))
+    (setq wingman--info-overlay nil))
+  (setq wingman--content-lines nil))
 
-(defun wingman--accept (content-lines how)
-  "Insert CONTENT-LINES according to HOW and remove overlay."
-  (wingman--log 2 "Accepted %s (%d lines)" how (length content-lines))
-  (let ((inhibit-modification-hooks t)
-        (pos (point))
-        (line-end (line-end-position)))
-    (pcase how
-      ('word
-       (let ((first-word (car (split-string (car content-lines) "\\b" t))))
-         (insert first-word)))
-      ('line
-       ;; Replace from point to end of line, then insert the first completion line
-       (delete-region pos line-end)
-       (insert (car content-lines)))
-      ('full
-       ;; Replace from point to end of line, then insert all completion lines
-       (delete-region pos line-end)
-       (insert (string-join content-lines "\n")))))
-  (wingman-hide))
+(defun wingman-accept-full ()
+  "Accept the full suggestion."
+  (interactive)
+  (wingman--accept 'full))
+
+(defun wingman-accept-line ()
+  "Accept the first line of the suggestion."
+  (interactive)
+  (wingman--accept 'line))
+
+(defun wingman-accept-word ()
+  "Accept the first word of the suggestion."
+  (interactive)
+  (wingman--accept 'word))
+
+(defun wingman--accept (how)
+  "Insert completion according to HOW and remove overlay."
+  (if wingman--content-lines
+      (progn
+        (wingman--log 2 "Accepted %s (%d lines)" how (length wingman--content-lines))
+        (let ((inhibit-modification-hooks t)
+              (pos (point))
+              (line-end (line-end-position)))
+          (pcase how
+            ('word
+             (let ((first-word (car (split-string (car wingman--content-lines) "\\b" t))))
+               (insert first-word)))
+            ('line
+             ;; Replace from point to end of line, then insert the first
+             ;; completion line
+             (delete-region pos line-end)
+             (insert (car wingman--content-lines)))
+            ('full
+             ;; Replace from point to end of line, then insert all completion
+             ;; lines
+             (delete-region pos line-end)
+             (insert (string-join wingman--content-lines "\n")))))
+        (wingman-hide))
+    (wingman--log 2 "No lines to accept")))
 
 (defun wingman--random-chunk (text)
   "Return a random slice of TEXT (list of lines), max size ring_chunk_size/2."
@@ -677,7 +704,8 @@ and ping server so it is cached."
   (wingman--cancel-timer-if-unused)
   (when wingman--current-request
     (request-abort wingman--current-request))
-  (setq wingman--ring-evict 0))
+  (setq wingman--ring-evict 0)
+  (setq wingman--content-lines nil))
 
 (defun wingman-clear-cache ()
   "Clear the in-memory cache of FIM responses."
