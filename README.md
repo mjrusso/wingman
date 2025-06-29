@@ -73,7 +73,6 @@ An example of a more advanced configuration:
   :config
 
   (setq wingman-log-level 4)
-  (setq wingman-key-accept-full (kbd "TAB"))
   (setq wingman-ring-n-chunks 16)
 
   ;; default llama.cpp server port is 8012
@@ -93,7 +92,13 @@ An example of a more advanced configuration:
                        (let ((fname (file-name-nondirectory buffer-file-name)))
                          (or (string-equal ".env" fname)
                              (string-equal ".envrc" fname)
-                             (string-prefix-p ".localrc" fname))))))))
+                             (string-prefix-p ".localrc" fname)))))))
+
+  :bind
+  (:map wingman-mode-completion-transient-map
+   ("TAB" . wingman-accept-full)
+   ("S-TAB" . wingman-accept-line)
+   ("M-S-TAB" . wingman-accept-word)))
 ```
 
 ## Usage
