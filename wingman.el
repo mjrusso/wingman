@@ -522,6 +522,7 @@ the `wingman-mode-map' map."
                (current-suffix (buffer-substring-no-properties pos (line-end-position)))
                (first-line (car content-lines))
                (remaining-lines (cdr content-lines))
+               (accept-content-lines (copy-sequence content-lines))
 
                ;; Find what part of the completion is *not* already typed.
                (common-prefix (wingman--string-common-prefix first-line current-suffix))
@@ -538,6 +539,12 @@ the `wingman-mode-map' map."
                           (truncate-string-to-width (car content-lines) 50)
                           (length content-lines))
 
+            ;; Append the existing text (after the cursor) to the last line of
+            ;; the suggestion. See: <https://github.com/mjrusso/wingman/issues/2>
+            (when (and accept-content-lines (not (string-empty-p current-suffix)))
+              (setcar (last accept-content-lines)
+                      (concat (car (last accept-content-lines)) current-suffix)))
+
             (overlay-put first-ov 'after-string (propertize display-first-line 'face 'wingman-overlay-face))
             (overlay-put first-ov 'wingman t)
             (setq wingman--hint-overlay first-ov)
@@ -551,7 +558,7 @@ the `wingman-mode-map' map."
                 (overlay-put multi-ov 'after-string multi-display)
                 (overlay-put multi-ov 'wingman t)
                 (setq wingman--info-overlay multi-ov)))
-            (setq wingman--content-lines content-lines)
+            (setq wingman--content-lines accept-content-lines)
             (set-transient-map wingman-mode-completion-transient-map t)))))))
 
 (defun wingman-hide ()
@@ -582,28 +589,36 @@ the `wingman-mode-map' map."
 
 (defun wingman--accept (how)
   "Insert completion according to HOW and remove overlay."
-  (if wingman--content-lines
-      (progn
-        (wingman--log 2 "Accepted %s (%d lines)" how (length wingman--content-lines))
-        (let ((inhibit-modification-hooks t)
-              (pos (point))
-              (line-end (line-end-position)))
+  (let* ((inhibit-modification-hooks t)
+         (content-lines wingman--content-lines)
+         (pos (point))
+         (bol (line-beginning-position))
+         (eol (line-end-position))
+         (prefix (buffer-substring-no-properties bol pos)))
+    (wingman-hide)
+    (if content-lines
+        (progn
+          (wingman--log 2 "Accepted %s (%d lines)" how (length wingman--content-lines))
           (pcase how
             ('word
-             (let ((first-word (car (split-string (car wingman--content-lines) "\\b" t))))
-               (insert first-word)))
+             (let* ((first-line-suggestion (car content-lines))
+                    (original-suffix (buffer-substring-no-properties pos eol))
+                    (suggestion-for-word (if (string-suffix-p original-suffix first-line-suggestion)
+                                             (substring first-line-suggestion 0 (- (length first-line-suggestion) (length original-suffix)))
+                                           first-line-suggestion))
+                    (first-word (car (split-string suggestion-for-word "\\b" t))))
+               (delete-region bol eol)
+               (insert (concat prefix first-word original-suffix))
+               (goto-char (+ bol (length prefix) (length first-word)))))
             ('line
-             ;; Replace from point to end of line, then insert the first
-             ;; completion line
-             (delete-region pos line-end)
-             (insert (car wingman--content-lines)))
+             (delete-region bol eol)
+             (insert (concat prefix (car content-lines)))
+             (goto-char (point-max)))
             ('full
-             ;; Replace from point to end of line, then insert all completion
-             ;; lines
-             (delete-region pos line-end)
-             (insert (string-join wingman--content-lines "\n")))))
-        (wingman-hide))
-    (wingman--log 2 "No lines to accept")))
+             (delete-region bol eol)
+             (insert (concat prefix (string-join content-lines "\n")))
+             (goto-char (point-max)))))
+      (wingman--log 2 "No lines to accept"))))
 
 (defun wingman--random-chunk (text)
   "Return a random slice of TEXT (list of lines), max size ring_chunk_size/2."
