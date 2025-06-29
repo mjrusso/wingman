@@ -137,18 +137,6 @@ For example:
   :type '(choice (const :tag "Unbound" nil) key-sequence)
   :group 'wingman)
 
-(defcustom wingman-key-accept-full (kbd "TAB")
-  "Key that accepts full suggestion."
-  :type 'key-sequence)
-
-(defcustom wingman-key-accept-line (kbd "S-TAB")
-  "Key that accepts only first line."
-  :type 'key-sequence)
-
-(defcustom wingman-key-accept-word (kbd "M-S-TAB")
-  "Key that accepts only first word."
-  :type 'key-sequence)
-
 (defcustom wingman-ring-n-chunks 16 "Maximum extra chunks." :type 'integer)
 (defcustom wingman-ring-chunk-size 64 "Lines per chunk." :type 'integer)
 (defcustom wingman-ring-scope 1024  "How far around point to harvest." :type 'integer)
@@ -249,13 +237,11 @@ For example:
     m)
   "Local map for wingman-mode.")
 
-(defvar wingman-mode-completion-transient-map
-  (let ((m (make-sparse-keymap)))
-    (define-key m wingman-key-accept-full #'wingman-accept-full)
-    (define-key m wingman-key-accept-line #'wingman-accept-line)
-    (define-key m wingman-key-accept-word #'wingman-accept-word)
-    m)
-  "Local map for wingman-mode while there is an active completion.")
+(defvar-keymap wingman-mode-completion-transient-map
+  :doc "Local map for wingman-mode while there is an active completion."
+  "TAB" #'wingman-accept-full
+  "S-TAB" #'wingman-accept-line
+  "M-S-TAB" #'wingman-accept-word)
 
 ;;;###autoload
 (define-minor-mode wingman-mode
