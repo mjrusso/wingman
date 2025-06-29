@@ -271,8 +271,7 @@ For example:
     (remove-hook 'after-save-hook #'wingman--pick-chunk-on-save t)
     (remove-hook 'yank-post-process-hook #'wingman--pick-chunk-on-yank t)
     (remove-hook 'kill-buffer-hook #'wingman--cleanup t)
-    (wingman-hide)
-    (wingman--cancel-timer-if-unused)))
+    (wingman--cleanup)))
 
 (defun wingman--ring-update-dispatch ()
   "Called by the single global timer to process the global chunk queue."
@@ -675,6 +674,7 @@ and ping server so it is cached."
 (defun wingman--cleanup ()
   "Buffer-local cleanup when wingman-mode is disabled or buffer is killed."
   (wingman-hide)
+  (wingman--cancel-timer-if-unused)
   (when wingman--current-request
     (request-abort wingman--current-request))
   (setq wingman--ring-evict 0))
