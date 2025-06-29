@@ -66,7 +66,7 @@ An example of a more advanced configuration:
 
   :init
 
-  (setq wingman-key-trigger (kbd "C-c a z"))
+  (setq wingman-prefix-key (kbd "C-c w"))
 
   :hook (prog-mode . wingman-mode)
 
@@ -95,7 +95,9 @@ An example of a more advanced configuration:
                              (string-prefix-p ".localrc" fname)))))))
 
   :bind
-  (:map wingman-mode-completion-transient-map
+  (:map wingman-mode-prefix-map
+   ("TAB" . wingman-fim-inline)
+   :map wingman-mode-completion-transient-map
    ("TAB" . wingman-accept-full)
    ("S-TAB" . wingman-accept-line)
    ("M-S-TAB" . wingman-accept-word)))
@@ -106,7 +108,7 @@ An example of a more advanced configuration:
 1. **Enable the mode:** `wingman-mode` is a buffer-local minor mode. You can enable it with `M-x wingman-mode` or have it enabled automatically via the hook as shown above.
 2. **Get Completions:**
    * If `wingman-auto-fim` is `t` (the default), completions will appear automatically as you type.
-   * To manually request a completion, press the trigger key (customized via `wingman-key-trigger`).
+   * To manually request a completion, use `wingman-fim-inline`. By default this is bound to `C-c w TAB` in the `wingman-mode-map`, and may be customized via `wingman-prefix-key` and `wingman-mode-prefix-map`.
 3. **Accept a Completion:**
    * **Full:** Press the "accept full" key (default: `<tab>`) to insert the entire suggestion.
    * **Line:** Press the "accept line" key (default: `S-TAB`) to insert only the first line of the suggestion.

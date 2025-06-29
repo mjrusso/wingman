@@ -125,16 +125,9 @@ Example:
   :type '(repeat function)
   :group 'wingman)
 
-(defcustom wingman-key-trigger nil
-  "Keybinding that explicitly requests completion.
-
-This is unbound by default to avoid conflicts with user
-configurations. To bind a key for this command, set this
-variable in your init file before `wingman-mode` is loaded.
-For example:
-
-  (setq wingman-key-trigger (kbd \"C-c l\"))"
-  :type '(choice (const :tag "Unbound" nil) key-sequence)
+(defcustom wingman-prefix-key "C-c w"
+  "Key in the `wingman-mode-map' prefixing the `wingman-mode-prefix-map'."
+  :type '(choice (const :tag "Unbound" nil) key)
   :group 'wingman)
 
 (defcustom wingman-ring-n-chunks 16 "Maximum extra chunks." :type 'integer)
@@ -230,12 +223,18 @@ For example:
   "Hook function for `yank-post-process-hook' to pick a chunk."
   (wingman--pick-chunk))
 
+(defvar-keymap wingman-mode-prefix-map
+  :doc "Local map for wingman-mode. Will be prefixed by `wingman-prefix-key' in
+the `wingman-mode-map' map."
+  "TAB" #'wingman-fim-inline)
+
 (defvar wingman-mode-map
-  (let ((m (make-sparse-keymap)))
-    (when wingman-key-trigger
-      (define-key m wingman-key-trigger #'wingman-fim-inline))
-    m)
-  "Local map for wingman-mode.")
+  (let ((map (make-sparse-keymap)))
+    (when wingman-prefix-key
+      (define-key map (kbd wingman-prefix-key) wingman-mode-prefix-map))
+    map)
+  "Keymap for wingman-mode. Keybindings will use the prefix as defined by
+`wingman-prefix-key'.")
 
 (defvar-keymap wingman-mode-completion-transient-map
   :doc "Local map for wingman-mode while there is an active completion."
