@@ -2,6 +2,15 @@
 #+author: Michael Russo
 #+language: en
 
+* Version 0.2 (2025-06-29)
+
+- Change how keybindings are configured:
+  - Remove ~wingman-key-trigger~, replacing with combination of
+    ~wingman-prefix-key~ and ~wingman-mode-prefix-map~
+  - Expose transient keymap ~wingman-mode-completion-transient-map~
+- Fix: preserve text after cursor when applying interior completions
+- Fix: prevent completions from potentially rendering in incorrect buffer
+
 * Version 0.1 (2025-06-27)
 
 - Initial release
