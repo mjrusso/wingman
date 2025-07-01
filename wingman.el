@@ -316,7 +316,7 @@ the `wingman-mode-map' map."
           (setq lines-prefix
                 (append (last lines-prefix (- (length prev) 1))
                         prev))
-          (setq line-prefix (concat line-prefix (car prev)))
+          (setq line-prefix (concat cur-line (car prev)))
           (setq line-suffix "")))
 
       (setq prefix  (concat (string-join lines-prefix "\n") "\n")
