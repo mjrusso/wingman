@@ -624,12 +624,10 @@ the `wingman-mode-map' map."
                (goto-char (+ bol (length prefix) (length first-word)))))
             ('line
              (delete-region bol eol)
-             (insert (concat prefix (car content-lines)))
-             (goto-char (point-max)))
+             (insert (concat prefix (car content-lines))))
             ('full
              (delete-region bol eol)
-             (insert (concat prefix (string-join content-lines "\n")))
-             (goto-char (point-max)))))
+             (insert (concat prefix (string-join content-lines "\n"))))))
       (wingman--log 2 "No lines to accept"))))
 
 (defun wingman--random-chunk (text)
