@@ -294,7 +294,7 @@ the `wingman-mode-map' map."
   "Return an alist (prefix middle suffix indent line-prefix line-suffix line-full)."
   (save-excursion
     (let ((pos (point))
-          (cur-line (thing-at-point 'line t))
+          (cur-line (or (thing-at-point 'line t) ""))
           (line-no (line-number-at-pos))
           lines-prefix lines-suffix prefix middle suffix indent
           line-prefix line-suffix)
