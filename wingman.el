@@ -340,8 +340,8 @@ the `wingman-mode-map' map."
       (forward-line (1- from))
       (let ((beg (point)))
         (goto-char (point-min))
-        (forward-line to)
-        (let ((end (point-at-eol)))
+        (forward-line (1- to))
+        (let ((end (line-end-position)))
           (split-string (buffer-substring-no-properties beg end) "\n"))))))
 
 (defun wingman-fim-inline ()
