@@ -261,12 +261,13 @@ the `wingman-mode-map' map."
           (add-hook 'kill-buffer-hook #'wingman--cleanup nil t)
           (run-at-time 0.1 nil (lambda () (wingman--pick-chunk t)))
           (wingman--ensure-timer)))
-    (setq wingman--active-buffers (delq (current-buffer) wingman--active-buffers))
-    (remove-hook 'post-command-hook #'wingman--on-point-move t)
-    (remove-hook 'after-save-hook #'wingman--pick-chunk-on-save t)
-    (remove-hook 'yank-post-process-hook #'wingman--pick-chunk-on-yank t)
-    (remove-hook 'kill-buffer-hook #'wingman--cleanup t)
-    (wingman--cleanup)))
+    (progn
+      (setq wingman--active-buffers (delq (current-buffer) wingman--active-buffers))
+      (remove-hook 'post-command-hook #'wingman--on-point-move t)
+      (remove-hook 'after-save-hook #'wingman--pick-chunk-on-save t)
+      (remove-hook 'yank-post-process-hook #'wingman--pick-chunk-on-yank t)
+      (remove-hook 'kill-buffer-hook #'wingman--cleanup t)
+      (wingman--cleanup))))
 
 (defun wingman--ring-update-dispatch ()
   "Called by the single global timer to process the global chunk queue."
@@ -309,12 +310,13 @@ the `wingman-mode-map' map."
 
       (if (or (null prev) (not (listp prev)))
           (setq indent (wingman--indent-of cur-line))
-        (setq indent (car-safe prev))
-        (setq lines-prefix
-              (append (last lines-prefix (- (length prev) 1))
-                      prev))
-        (setq line-prefix (concat cur-line (car prev)))
-        (setq line-suffix ""))
+        (progn
+          (setq indent (car-safe prev))
+          (setq lines-prefix
+                (append (last lines-prefix (- (length prev) 1))
+                        prev))
+          (setq line-prefix (concat line-prefix (car prev)))
+          (setq line-suffix "")))
 
       (setq prefix  (concat (string-join lines-prefix "\n") "\n")
             middle  line-prefix
@@ -328,7 +330,6 @@ the `wingman-mode-map' map."
         (line-prefix . ,line-prefix)
         (line-suffix . ,line-suffix)
         (line-full  . ,cur-line)))))
-
 
 (defun wingman--buffer-lines (from to)
   "Return a list of lines between line numbers FROM and TO inclusive."
