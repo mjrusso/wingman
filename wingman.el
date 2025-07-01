@@ -226,7 +226,8 @@ Example:
 (defvar-keymap wingman-mode-prefix-map
   :doc "Local map for wingman-mode. Will be prefixed by `wingman-prefix-key' in
 the `wingman-mode-map' map."
-  "TAB" #'wingman-fim-inline)
+  "TAB" #'wingman-fim-inline
+  "d" #'wingman-debug-completion)
 
 (defvar wingman-mode-map
   (let ((map (make-sparse-keymap)))
@@ -772,6 +773,193 @@ and ping server so it is cached."
            (length wingman--ring-chunks)
            (length wingman--ring-queue)
            (mapcar #'wingman--chunk-filename wingman--ring-chunks)))
+
+(defun wingman--comment-multiline (text)
+  "Add ;; comment prefix to each line of TEXT."
+  (mapconcat (lambda (line) (concat ";; " line))
+             (split-string text "\n")
+             "\n"))
+
+(defun wingman-debug-completion ()
+  "Generate elisp code in a temp buffer for debugging completion requests."
+  (interactive)
+  (let* ((ctx (wingman--collect-local-context))
+         (pre (substring-no-properties (alist-get 'prefix ctx)))
+         (mid (substring-no-properties (alist-get 'middle ctx)))
+         (suf (substring-no-properties (alist-get 'suffix ctx)))
+         (indent (alist-get 'indent ctx))
+         (extra-context (wingman--extra-context))
+         (buf (get-buffer-create "*wingman-debug-request*")))
+
+    (with-current-buffer buf
+      (erase-buffer)
+      (insert ";;; -*- lexical-binding: t -*-\n\n")
+      (insert ";; Wingman Request Debugger\n\n")
+      (insert ";; Evaluate this buffer to send a completion request and observe results\n\n")
+      (emacs-lisp-mode)
+
+      (insert ";; Current context:\n")
+      (insert (format ";; - Prefix: %d chars\n" (length pre)))
+      (insert (format ";; - Middle: %d chars - ```%s```\n" (length mid) mid))
+      (insert (format ";; - Suffix: %d chars\n" (length suf)))
+      (insert (format ";; - Ring buffer chunks: %d\n" (length extra-context)))
+      (insert (format ";; - Indent: %d\n\n" indent))
+
+      (insert ";; Prefix content:\n;;```\n")
+      (insert (wingman--comment-multiline pre))
+      (insert "\n;;```\n\n")
+
+      (insert ";; Middle content:\n;;```\n")
+      (insert (wingman--comment-multiline mid))
+      (insert "\n;;```\n\n")
+
+      (insert ";; Suffix content:\n;;```\n")
+      (insert (wingman--comment-multiline suf))
+      (insert "\n;;```\n\n")
+
+      (insert ";; Ring buffer contents (input_extra):\n")
+      (if (= (length extra-context) 0)
+          (insert ";; (empty)\n")
+        (dotimes (i (length extra-context))
+          (let* ((chunk (aref extra-context i))
+                 (text (alist-get 'text chunk))
+                 (filename (alist-get 'filename chunk))
+                 (timestamp (alist-get 'time chunk)))
+            (insert (format ";; Chunk %d: %s (%.2f)\n" (1+ i) filename timestamp))
+            (insert (wingman--comment-multiline
+                     (format "   Text: %S" (truncate-string-to-width text 80))))
+            (insert "\n"))))
+      (insert "\n")
+
+      (insert "(setq debug-prefix ")
+      (pp pre buf)
+      (insert ")\n\n")
+
+      (insert "(setq debug-suffix ")
+      (pp suf buf)
+      (insert ")\n\n")
+
+      (insert "(setq debug-middle ")
+      (pp mid buf)
+      (insert ")\n\n")
+
+      (insert "(setq debug-extra-context ")
+      (pp extra-context buf)
+      (insert ")\n\n")
+
+      (insert "(setq debug-n-predict ")
+      (pp wingman-n-predict buf)
+      (insert ")\n\n")
+
+      (insert "(setq debug-stop-strings ")
+      (pp wingman-stop-strings buf)
+      (insert ")\n\n")
+
+      (insert "(setq debug-n-indent ")
+      (pp indent buf)
+      (insert ")\n\n")
+
+      (insert "(setq debug-url ")
+      (pp wingman-llama-endpoint buf)
+      (insert ")\n\n")
+
+      (insert "(setq debug-headers '")
+      (pp (append '(("Content-Type" . "application/json"))
+                  (when wingman-llama-api-key
+                    `(("Authorization" . ,(concat "Bearer " wingman-llama-api-key)))))
+          buf)
+      (insert ")\n\n")
+
+      (insert ";; USAGE EXAMPLES:\n")
+      (insert ";;\n")
+      (insert ";; To disable ring buffer:\n")
+      (insert ";; (setq debug-extra-context [])\n")
+      (insert ";;\n")
+      (insert ";; To test with modified prefix:\n")
+      (insert ";; (setq debug-prefix \"your custom prefix here\")\n")
+      (insert ";;\n")
+      (insert ";; To test with different context:\n")
+      (insert ";; (setq debug-middle \"    return a + b\")\n")
+      (insert ";;\n")
+      (insert ";; To add custom ring buffer content:\n")
+      (insert ";; (setq debug-extra-context\n")
+      (insert ";;       [{\"text\" \"def example():\\n    pass\\n\"\n")
+      (insert ";;         \"time\" 1234567890.0\n")
+      (insert ";;         \"filename\" \"example.py\"}])\n")
+      (insert ";;\n")
+      (insert ";; After modifying any variables, re-evaluate the request block below.\n\n")
+
+      (insert "(require 'request)\n")
+      (insert "(require 'json)\n\n")
+
+      (insert "(let* ((payload (list\n")
+      (insert "                 (cons \"input_prefix\" debug-prefix)\n")
+      (insert "                 (cons \"input_suffix\" debug-suffix)\n")
+      (insert "                 (cons \"input_extra\" debug-extra-context)\n")
+      (insert "                 (cons \"prompt\" debug-middle)\n")
+      (insert "                 (cons \"n_predict\" debug-n-predict)\n")
+      (insert "                 (cons \"stop\" debug-stop-strings)\n")
+      (insert "                 (cons \"n_indent\" debug-n-indent)\n")
+      (insert "                 (cons \"top_k\" 40)\n")
+      (insert "                 (cons \"top_p\" 0.9)\n")
+      (insert "                 (cons \"stream\" :json-false)\n")
+      (insert "                 (cons \"samplers\" [\"top_k\" \"top_p\" \"infill\"])\n")
+      (insert "                 (cons \"cache_prompt\" t)\n")
+      (insert "                 (cons \"response_fields\" [\"content\"\n")
+      (insert "                                           \"tokens_cached\"\n")
+      (insert "                                           \"timings/prompt_n\"\n")
+      (insert "                                           \"timings/prompt_ms\"\n")
+      (insert "                                           \"timings/predicted_n\"\n")
+      (insert "                                           \"timings/predicted_ms\"])))\n")
+      (insert "       (data (json-encode payload)))\n")
+      (insert "  (request\n")
+      (insert "   debug-url\n")
+      (insert "   :type \"POST\"\n")
+      (insert "   :headers debug-headers\n")
+      (insert "   :data data\n")
+      (insert "   :parser 'buffer-string\n")
+      (insert "   :success (cl-function\n")
+      (insert "             (lambda (&key data &allow-other-keys)\n")
+      (insert "               (let* ((resp (json-read-from-string data))\n")
+      (insert "                      (content (alist-get 'content resp))\n")
+      (insert "                      (tokens-cached (alist-get 'tokens_cached resp))\n")
+      (insert "                      (prompt-n (alist-get 'timings/prompt_n resp))\n")
+      (insert "                      (prompt-ms (alist-get 'timings/prompt_ms resp))\n")
+      (insert "                      (predicted-n (alist-get 'timings/predicted_n resp))\n")
+      (insert "                      (predicted-ms (alist-get 'timings/predicted_ms resp)))\n")
+      (insert "                 (message \"Completion received (%d chars)\" (length content))\n")
+      (insert "                 (message \"Tokens cached: %s\" tokens-cached)\n")
+      (insert "                 (message \"Prompt: %s tokens in %.1fms\" prompt-n prompt-ms)\n")
+      (insert "                 (message \"Predicted: %s tokens in %.1fms\" predicted-n predicted-ms)\n")
+      (insert "                 (with-current-buffer (get-buffer-create \"*wingman-debug-result*\")\n")
+      (insert "                   (erase-buffer)\n")
+      (insert "                   (insert \"Completion:\\n\\n```\\n\")\n")
+      (insert "                   (insert content)\n")
+      (insert "                   (insert \"\\n```\\n\\n\")\n")
+      (insert "                   (insert \"Metadata:\\n\\n\")\n")
+      (insert "                   (insert (format \"* Tokens cached: %s\\n\" tokens-cached))\n")
+      (insert "                   (insert (format \"* Prompt: %s tokens in %.1fms\\n\" prompt-n prompt-ms))\n")
+      (insert "                   (insert (format \"* Predicted: %s tokens in %.1fms\\n\" predicted-n predicted-ms))\n")
+      (insert "                   (goto-char (point-min))\n")
+      (insert "                   (display-buffer (current-buffer))))))\n")
+      (insert "   :error (cl-function\n")
+      (insert "           (lambda (&rest args &key error-thrown &allow-other-keys)\n")
+      (insert "             (message \"Request failed: %S\" error-thrown)\n")
+      (insert "             (with-current-buffer (get-buffer-create \"*wingman-debug-result*\")\n")
+      (insert "               (erase-buffer)\n")
+      (insert "               (insert \"Request failed:\\n\")\n")
+      (insert "               (insert (format \"%S\" error-thrown))\n")
+      (insert "               (display-buffer (current-buffer)))))))\n")
+      (insert "\n")
+
+      (goto-char (point-min))
+      (display-buffer buf)
+
+      (with-current-buffer buf
+        (condition-case err
+            (eval-buffer)
+          (error
+           (message "Debug evaluation failed: %S" err)))))))
 
 (provide 'wingman)
 ;;; wingman.el ends here
