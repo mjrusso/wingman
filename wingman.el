@@ -503,9 +503,9 @@ the `wingman-mode-map' map."
                   (length project-chunks) (or current-project-root "global"))
     (vconcat
      (mapcar (lambda (c)
-               `(("text" . ,(wingman--chunk-string c))
-                 ("time" . ,(wingman--chunk-timestamp c))
-                 ("filename" . ,(wingman--chunk-filename c))))
+               `((text . ,(wingman--chunk-string c))
+                 (time . ,(wingman--chunk-timestamp c))
+                 (filename . ,(wingman--chunk-filename c))))
              project-chunks))))
 
 (defun wingman--render (raw indent buf)
