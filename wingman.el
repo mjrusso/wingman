@@ -791,31 +791,32 @@ and ping server so it is cached."
 
     (with-current-buffer buf
       (erase-buffer)
-      (insert ";;; -*- lexical-binding: t -*-\n\n")
-      (insert ";; Wingman Request Debugger\n\n")
-      (insert ";; Evaluate this buffer to send a completion request and observe results\n\n")
+      (insert ";;; wingman-request-debugger --- debug tool for wingman.el -*- lexical-binding: t -*-\n\n")
+      (insert ";;; Commentary:\n\n")
+      (insert ";; Evaluate this buffer to send a completion request and observe results\n\n\n")
       (emacs-lisp-mode)
 
-      (insert ";; Current context:\n")
+      (insert ";; Current context:\n;;\n")
       (insert (format ";; - Prefix: %d chars\n" (length pre)))
-      (insert (format ";; - Middle: %d chars - ```%s```\n" (length mid) mid))
+      (insert (format ";; - Middle: %d chars\n" (length mid)))
       (insert (format ";; - Suffix: %d chars\n" (length suf)))
       (insert (format ";; - Ring buffer chunks: %d\n" (length extra-context)))
-      (insert (format ";; - Indent: %d\n\n" indent))
+      (insert (format ";; - Indent: %d\n" indent))
+      (insert "\n\n")
 
-      (insert ";; Prefix content:\n;;```\n")
+      (insert ";; Prefix content:\n;;\n;;```\n")
       (insert (wingman--comment-multiline pre))
-      (insert "\n;;```\n\n\n\n")
+      (insert "\n;;```\n\n\n")
 
-      (insert ";; Middle content:\n;;```\n")
+      (insert ";; Middle content:\n;;\n;;```\n")
       (insert (wingman--comment-multiline mid))
-      (insert "\n;;```\n\n\n\n")
+      (insert "\n;;```\n\n\n")
 
-      (insert ";; Suffix content:\n;;```\n")
+      (insert ";; Suffix content:\n;;\n;;```\n")
       (insert (wingman--comment-multiline suf))
-      (insert "\n;;```\n\n\n\n")
+      (insert "\n;;```\n\n\n")
 
-      (insert ";; Ring buffer contents (input_extra):\n")
+      (insert ";; Ring buffer contents (`input_extra`):\n;;\n")
       (if (= (length extra-context) 0)
           (insert ";; (empty)\n")
         (dotimes (i (length extra-context))
@@ -827,7 +828,7 @@ and ping server so it is cached."
             (insert (wingman--comment-multiline
                      (format "   Text: %S" (truncate-string-to-width text 80))))
             (insert "\n"))))
-      (insert "\n\n\n\n")
+      (insert "\n\n\n")
 
       (insert "(setq debug-prefix ")
       (pp pre buf)
