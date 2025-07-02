@@ -651,14 +651,14 @@ the `wingman-mode-map' map."
            (project-root (when-let ((proj (project-current)))
                            (project-root proj)))
            (new-chunk (make-wingman--chunk :data chunk
-                                         :string chunk-str
-                                         :timestamp (float-time)
-                                         :filename (or (buffer-file-name) (buffer-name))
-                                         :project-root project-root)))
+                                           :string chunk-str
+                                           :timestamp (float-time)
+                                           :filename (or (buffer-file-name) (buffer-name))
+                                           :project-root project-root)))
       ;; Evict similar chunks before adding the new one
       (wingman--evict-similar-chunks new-chunk 0.5)
       (wingman--log 3 "Queued chunk of %d lines from %s (project: %s)"
-                  (length chunk) (buffer-name) (or project-root "global"))
+                    (length chunk) (buffer-name) (or project-root "global"))
       (push new-chunk wingman--ring-queue))))
 
 (defun wingman--chunk-similarity (chunk1 chunk2)
