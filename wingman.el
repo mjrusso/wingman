@@ -845,6 +845,8 @@ and ping server so it is cached."
       (pp extra-context buf)
       (insert ")\n\n")
 
+      (insert ";; (setq debug-extra-context []) ; uncomment this line to disable ring buffer\n\n")
+
       (insert "(setq debug-n-predict ")
       (pp wingman-n-predict buf)
       (insert ")\n\n")
