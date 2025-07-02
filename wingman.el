@@ -805,15 +805,15 @@ and ping server so it is cached."
 
       (insert ";; Prefix content:\n;;```\n")
       (insert (wingman--comment-multiline pre))
-      (insert "\n;;```\n\n")
+      (insert "\n;;```\n\n\n\n")
 
       (insert ";; Middle content:\n;;```\n")
       (insert (wingman--comment-multiline mid))
-      (insert "\n;;```\n\n")
+      (insert "\n;;```\n\n\n\n")
 
       (insert ";; Suffix content:\n;;```\n")
       (insert (wingman--comment-multiline suf))
-      (insert "\n;;```\n\n")
+      (insert "\n;;```\n\n\n\n")
 
       (insert ";; Ring buffer contents (input_extra):\n")
       (if (= (length extra-context) 0)
@@ -827,7 +827,7 @@ and ping server so it is cached."
             (insert (wingman--comment-multiline
                      (format "   Text: %S" (truncate-string-to-width text 80))))
             (insert "\n"))))
-      (insert "\n")
+      (insert "\n\n\n\n")
 
       (insert "(setq debug-prefix ")
       (pp pre buf)
