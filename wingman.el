@@ -193,6 +193,9 @@ Example:
 (defvar wingman--active-buffers nil
   "List of live buffers where `wingman-mode' is enabled.")
 
+(defvar wingman--accepting-completion-p nil
+  "Dynamically-scoped guard to prevent hooks from firing during completion acceptance.")
+
 (defvar wingman--ring-timer nil)
 
 (defun wingman--ensure-timer ()
@@ -358,9 +361,9 @@ the `wingman-mode-map' map."
 
 (defun wingman--on-point-move ()
   "Hide hint on movement; possibly auto-trigger a new one."
-  (unless (and (symbolp this-command)
-               (string-prefix-p "wingman-" (symbol-name this-command)))
-
+  (unless (or wingman--accepting-completion-p
+              (and (symbolp this-command)
+                   (string-prefix-p "wingman-" (symbol-name this-command))))
     (setq wingman--last-move-time (current-time))
 
     (when (or (overlayp wingman--hint-overlay) (overlayp wingman--info-overlay))
@@ -587,30 +590,31 @@ the `wingman-mode-map' map."
 (defun wingman-accept-full ()
   "Accept the full suggestion."
   (interactive)
-  (wingman--accept 'full))
+  (let ((wingman--accepting-completion-p t))
+    (wingman--accept 'full wingman--content-lines)))
 
 (defun wingman-accept-line ()
   "Accept the first line of the suggestion."
   (interactive)
-  (wingman--accept 'line))
+  (let ((wingman--accepting-completion-p t))
+    (wingman--accept 'line wingman--content-lines)))
 
 (defun wingman-accept-word ()
   "Accept the first word of the suggestion."
   (interactive)
-  (wingman--accept 'word))
+  (let ((wingman--accepting-completion-p t))
+    (wingman--accept 'word wingman--content-lines)))
 
-(defun wingman--accept (how)
-  "Insert completion according to HOW and remove overlay."
-  (let* ((inhibit-modification-hooks t)
-         (content-lines wingman--content-lines)
-         (pos (point))
-         (bol (line-beginning-position))
-         (eol (line-end-position))
-         (prefix (buffer-substring-no-properties bol pos)))
-    (wingman-hide)
-    (if content-lines
-        (progn
-          (wingman--log 2 "Accepted %s (%d lines)" how (length wingman--content-lines))
+(defun wingman--accept (how content-lines)
+  "Insert completion CONTENT-LINES according to HOW and remove overlay."
+  (wingman-hide)
+  (if content-lines
+      (let* ((pos (point))
+             (bol (line-beginning-position))
+             (eol (line-end-position))
+             (prefix (buffer-substring-no-properties bol pos)))
+        (combine-after-change-calls
+          (wingman--log 2 "Accepted %s (%d lines)" how (length content-lines))
           (pcase how
             ('word
              (let* ((first-line-suggestion (car content-lines))
@@ -627,8 +631,8 @@ the `wingman-mode-map' map."
              (insert (concat prefix (car content-lines))))
             ('full
              (delete-region bol eol)
-             (insert (concat prefix (string-join content-lines "\n"))))))
-      (wingman--log 2 "No lines to accept"))))
+             (insert (concat prefix (string-join content-lines "\n")))))))
+    (wingman--log 2 "No lines to accept")))
 
 (defun wingman--random-chunk (text)
   "Return a random slice of TEXT (list of lines), max size ring_chunk_size/2."
