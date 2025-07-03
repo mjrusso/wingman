@@ -99,7 +99,6 @@
 This is an internal variable. Users should customize `wingman-disable-predicates`
 to add their own rules.")
 
-
 (defcustom wingman-disable-predicates nil
   "A list of predicates to decide whether `wingman-mode' should be disabled.
 
@@ -132,7 +131,6 @@ Example:
 
 (defcustom wingman-ring-n-chunks 16 "Maximum extra chunks." :type 'integer)
 (defcustom wingman-ring-chunk-size 64 "Lines per chunk." :type 'integer)
-(defcustom wingman-ring-scope 1024  "How far around point to harvest." :type 'integer)
 (defcustom wingman-ring-update-ms 1000 "Background update cadence." :type 'integer)
 
 (defgroup wingman-debug nil
