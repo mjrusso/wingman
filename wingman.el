@@ -780,22 +780,37 @@ filtering is performed."
   (wingman-clear-ring-buffer))
 
 (defun wingman-ring-report ()
-  "Display the current state of the global ring buffer."
+  "Display the current state of the global ring buffer and queue."
   (interactive)
-  (if (null wingman--ring-chunks)
-      (message "wingman: ring is empty")
+  (if (and (null wingman--ring-chunks) (null wingman--ring-queue))
+      (message "wingman: ring buffer and queue are empty")
     (with-current-buffer (get-buffer-create "*wingman-ring*")
       (erase-buffer)
-      (dolist (c wingman--ring-chunks)
-        (insert (format "• %s (%s)\n  (Project: %s, %d lines, %s)\n"
-                        (file-name-nondirectory (wingman--chunk-filename c))
-                        (file-name-directory (wingman--chunk-filename c))
-                        (or (wingman--chunk-project-root c) "none")
-                        (length (wingman--chunk-data c))
-                        (format-time-string "%H:%M:%S"
-                                            (seconds-to-time (wingman--chunk-timestamp c)))))
-        (insert (propertize (string-join (wingman--chunk-data c) "\n")
-                            'face 'shadow) "\n\n"))
+      (cl-labels ((insert-chunk-details (c)
+                    (insert (format "• %s (%s)\n  (Project: %s, %d lines, %s)\n"
+                                    (file-name-nondirectory (wingman--chunk-filename c))
+                                    (file-name-directory (wingman--chunk-filename c))
+                                    (or (wingman--chunk-project-root c) "none")
+                                    (length (wingman--chunk-data c))
+                                    (format-time-string "%H:%M:%S"
+                                                        (seconds-to-time (wingman--chunk-timestamp c)))))
+                    (insert (propertize (string-join (wingman--chunk-data c) "\n")
+                                        'face 'shadow) "\n\n")))
+
+        (insert (format "--- Active Ring Chunks: %d ---\n\n"
+                        (length wingman--ring-chunks)))
+        (if (null wingman--ring-chunks)
+            (insert "(empty)\n\n")
+          (dolist (c wingman--ring-chunks)
+            (insert-chunk-details c)))
+
+        (insert (format "--- Queued Chunks: %d ---\n\n"
+                        (length wingman--ring-queue)))
+        (if (null wingman--ring-queue)
+            (insert "(empty)\n\n")
+          (dolist (c wingman--ring-queue)
+            (insert-chunk-details c))))
+
       (goto-char (point-min))
       (display-buffer (current-buffer)))))
 
