@@ -786,6 +786,10 @@ filtering is performed."
       (message "wingman: ring buffer and queue are empty")
     (with-current-buffer (get-buffer-create "*wingman-ring*")
       (erase-buffer)
+      (insert (format "Ring: %d chunks (%d max), %d queued\n\n"
+                      (length wingman--ring-chunks)
+                      wingman-ring-n-chunks
+                      (length wingman--ring-queue)))
       (cl-labels ((insert-chunk-details (c)
                     (insert (format "• %s (%s)\n  (Project: %s, %d lines, %s)\n"
                                     (file-name-nondirectory (wingman--chunk-filename c))
@@ -818,15 +822,6 @@ filtering is performed."
   "Pop to the `wingman-log-buffer'."
   (interactive)
   (pop-to-buffer (get-buffer-create wingman-log-buffer)))
-
-
-(defun wingman-debug-ring ()
-  "Show current ring buffer status."
-  (interactive)
-  (message "Ring: %d chunks, %d queued. Chunks: %S"
-           (length wingman--ring-chunks)
-           (length wingman--ring-queue)
-           (mapcar #'wingman--chunk-filename wingman--ring-chunks)))
 
 (defun wingman--comment-multiline (text)
   "Add ;; comment prefix to each line of TEXT."
