@@ -442,7 +442,7 @@ the `wingman-mode-map' map."
   (let* ((payload
           `(("input_prefix" . ,(alist-get 'prefix ctx))
             ("input_suffix" . ,(alist-get 'suffix ctx))
-            ("input_extra"  . ,(wingman--extra-context))
+            ("input_extra"  . ,(wingman--extra-context ctx))
             ("prompt"       . ,(alist-get 'middle ctx))
             ("n_predict"    . ,wingman-n-predict)
             ("stop"         . ,wingman-stop-strings)
@@ -493,23 +493,47 @@ the `wingman-mode-map' map."
                       (wingman--log 1 "HTTP ERROR: %S" error-thrown)))
             :complete (lambda (&rest _) (setq wingman--current-request nil))))))
 
-(defun wingman--extra-context ()
-  "Return a vector of alists that represent ring chunks for the current project."
+(defun wingman--extra-context (&optional ctx)
+  "Return a vector of alists representing chunks from the ring buffer.
+If the optional `ctx` alist is provided (during a FIM request), this
+function filters out chunks from the ring buffer that are too similar to
+the current local context. Eliminating the overlap between the local FIM
+context and the ring buffer context reduces the tendency of the
+completion model to generate redundant completions.
+
+If `ctx` is nil (e.g., during background cache priming), no similarity
+filtering is performed."
   (let* ((current-project-root (when-let ((proj (project-current)))
                                  (project-root proj)))
-         ;; Filter the global list to get only chunks matching the current project.
          (project-chunks (-filter (lambda (c)
                                     (equal (wingman--chunk-project-root c)
                                            current-project-root))
-                                  wingman--ring-chunks)))
-    (wingman--log 3 "Found %d chunks for project: %s"
-                  (length project-chunks) (or current-project-root "global"))
+                                  wingman--ring-chunks))
+         (filtered-chunks
+          (if ctx
+              (let* ((local-context-lines (append (split-string (alist-get 'prefix ctx "") "\n")
+                                                  (split-string (alist-get 'suffix ctx "") "\n")))
+                     (local-chunk (make-wingman--chunk :data local-context-lines))
+                     (chunks-after-sim-filter (seq-remove (lambda (existing-chunk)
+                                                            (> (wingman--chunk-similarity existing-chunk local-chunk) 0.5))
+                                                          project-chunks))
+                     (evicted-count (- (length project-chunks) (length chunks-after-sim-filter))))
+
+                (when (> evicted-count 0)
+                  (wingman--log 3 "Ring: temporarily filtering %d chunks similar to the current context for this request"
+                                evicted-count))
+                chunks-after-sim-filter)
+            project-chunks)))
+
+    (wingman--log 3 "Sending %d chunks for project: %s"
+                  (length filtered-chunks) (or current-project-root "global"))
+
     (vconcat
      (mapcar (lambda (c)
                `((text . ,(wingman--chunk-string c))
                  (time . ,(wingman--chunk-timestamp c))
                  (filename . ,(wingman--chunk-filename c))))
-             project-chunks))))
+             filtered-chunks))))
 
 (defun wingman--render (raw indent buf)
   "Display RAW JSON as ghost text overlay, handling partial text."
@@ -790,7 +814,7 @@ and ping server so it is cached."
          (mid (substring-no-properties (alist-get 'middle ctx)))
          (suf (substring-no-properties (alist-get 'suffix ctx)))
          (indent (alist-get 'indent ctx))
-         (extra-context (wingman--extra-context))
+         (extra-context (wingman--extra-context ctx))
          (buf (get-buffer-create "*wingman-debug-request*")))
 
     (with-current-buffer buf
