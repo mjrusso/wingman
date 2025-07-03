@@ -708,29 +708,44 @@ filtering is performed."
                     wingman--ring-chunks)))
 
 (defun wingman--ring-update ()
-  "Move one queued chunk from the global queue to the global processed list
-and ping server so it is cached."
+  "Move one queued chunk from the global queue and prime the server-side cache."
   (when (and wingman--ring-queue (< (length wingman--ring-chunks) wingman-ring-n-chunks))
-    (wingman--log 3 "Ring update: %d queued → %d active"
-                  (length wingman--ring-queue)
-                  (length wingman--ring-chunks))
-    (push (pop wingman--ring-queue) wingman--ring-chunks)
+    (let* ((chunk (pop wingman--ring-queue))
+           (project-root (wingman--chunk-project-root chunk)))
+      (push chunk wingman--ring-chunks)
 
-    (ignore-errors
-      ;; zero-token request so the server puts it in its KV-cache
-      (request
-       wingman-llama-endpoint
-       :type "POST"
-       :data (json-encode
-              `(("input_prefix" . "")
-                ("input_suffix" . "")
-                ("input_extra"  . ,(wingman--extra-context))
-                ("prompt"       . "")
-                ("n_predict"    . 0)
-                ("stream" . :json-false)
-                ("samplers" . [])))
-       :parser 'ignore
-       :error (lambda (&rest _) (message "wingman: background prime failed (server offline?)"))))))
+      (wingman--log 3 "Ring update: processing chunk for project '%s'. Total chunks: %d (queue: %d)."
+                    (or project-root "global") (length wingman--ring-chunks) (length wingman--ring-queue))
+
+      (let* ((project-chunks
+              (-filter (lambda (c) (equal (wingman--chunk-project-root c) project-root))
+                       wingman--ring-chunks))
+             (extra-context
+              (vconcat
+               (mapcar (lambda (c)
+                         `((text . ,(wingman--chunk-string c))
+                           (time . ,(wingman--chunk-timestamp c))
+                           (filename . ,(wingman--chunk-filename c))))
+                       project-chunks))))
+        (when project-chunks
+          (wingman--log 3 "Priming cache for project '%s' with %d chunks."
+                        (or project-root "global") (length project-chunks))
+          (ignore-errors
+            (request
+              wingman-llama-endpoint
+              :type "POST"
+              :data (json-encode
+                     `(("input_prefix" . "")
+                       ("input_suffix" . "")
+                       ("input_extra"  . ,extra-context)
+                       ("prompt"       . "")
+                       ("n_predict"    . 0)
+                       ("stream" . :json-false)
+                       ("samplers" . [])))
+              :parser 'ignore
+              :error (lambda (&rest _)
+                       (message "wingman: background prime failed for project '%s'"
+                                (or project-root "global"))))))))))
 
 (add-hook 'after-init-hook #'wingman--ring-update)
 
