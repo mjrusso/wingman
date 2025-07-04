@@ -2,6 +2,19 @@
 #+author: Michael Russo
 #+language: en
 
+* Version 0.3 (2025-07-03)
+
+- Improve quality of completions:
+  - Filter ring buffer context to prevent overlap with local context
+  - Eliminate overlap between current line context and prefix/suffix
+- Improve speed of completions:
+  - Align background cache priming with per-project context
+- Add ~wingman-debug-completion~ to help debug completion requests
+- Fix: prevent cursor from jumping to end of buffer after accepting completion
+- Fix: eliminate buffer modification tracking warnings
+- Fix: eliminate `wrong-type-argument` errors when completing in empty buffers
+- Remove ~wingman-debug-ring~ (use ~wingman-ring-report~ instead)
+
 * Version 0.2 (2025-06-29)
 
 - Change how keybindings are configured:
