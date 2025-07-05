@@ -78,23 +78,19 @@
   :type 'integer)
 
 (defconst wingman--default-disable-predicates
-  '(;; Disable in magit buffers, which are highly specialized.
-    (lambda () (derived-mode-p 'magit-mode))
-    ;; Disable in terminal emulator buffers.
-    (lambda () (or (derived-mode-p 'vterm-mode)
-                   (derived-mode-p 'shell-mode)
-                   (derived-mode-p 'term-mode)
-                   (derived-mode-p 'eshell-mode)))
+  '(;; Disable in non-text and non-prog buffers, i.e., disabling in
+    ;;
+    ;;  - `special-mode' (ex. *Messages*, `help-mode', `Info-mode', `magit-mode'),
+    ;;  - `comint-mode' (ex. `shell-mode'),
+    ;;  - `compilation-mode',
+    ;;  - and others, such as `vterm-mode', `term-mode', and `eshell-mode'.
+    ;;
+    (lambda () (and (not (derived-mode-p 'prog-mode))
+                    (not (derived-mode-p 'text-mode))))
     ;; Disable in special Emacs buffers that typically start with a "*".
     (lambda () (string-prefix-p "*" (buffer-name)))
     ;; Disable in read-only buffers where the user can't insert text anyway.
-    (lambda () buffer-read-only)
-    ;; Disable in help, info, and man page buffers.
-    (lambda () (or (derived-mode-p 'help-mode)
-                   (derived-mode-p 'Info-mode)
-                   (derived-mode-p 'man-mode)))
-    ;; Disable in compilation output buffers.
-    (lambda () (derived-mode-p 'compilation-mode)))
+    (lambda () buffer-read-only))
   "A list of default predicates to decide whether `wingman-mode' should be disabled.
 This is an internal variable. Users should customize `wingman-disable-predicates`
 to add their own rules.")
