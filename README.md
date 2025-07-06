@@ -105,7 +105,7 @@ An example of a more advanced configuration:
 
 ## Usage
 
-1. **Enable the mode:** `wingman-mode` is a buffer-local minor mode. You can enable it with `M-x wingman-mode` or have it enabled automatically via the hook as shown above.
+1. **Enable the mode:** `wingman-mode` is a buffer-local minor mode. You can enable it with `M-x wingman-mode`, or globally in all applicable buffers with `global-wingman-mode`. (Alternatively, you may enable `wingman-mode` automatically via the hook as shown in the configuration examples above.)
 2. **Get Completions:**
    * If `wingman-auto-fim` is `t` (the default), completions will appear automatically as you type.
    * To manually request a completion, use `wingman-fim-inline`. By default this is bound to `C-c w TAB` in the `wingman-mode-map`, and may be customized via `wingman-prefix-key` and `wingman-mode-prefix-map`.
