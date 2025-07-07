@@ -267,6 +267,17 @@ the `wingman-mode-map' map."
       (remove-hook 'kill-buffer-hook #'wingman--cleanup t)
       (wingman--cleanup))))
 
+(defun wingman--maybe-enable-mode ()
+  "Enable `wingman-mode' in the current buffer if it is not already
+enabled, and only if it may be enabled as determined by `wingman-disable-predicates'."
+  (when (and (not wingman-mode) (not (wingman--should-be-disabled-p)))
+    (wingman-mode 1)))
+
+;;;###autoload
+(define-globalized-minor-mode global-wingman-mode wingman-mode
+  wingman--maybe-enable-mode
+  :group 'wingman)
+
 (defun wingman--ring-update-dispatch ()
   "Called by the single global timer to process the global chunk queue."
   (wingman--ring-update)
