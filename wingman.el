@@ -31,6 +31,8 @@
 
 ;;; Code:
 
+(defconst wingman-version "0.4")
+
 (require 'dash)
 (require 'json)
 (require 'project)
