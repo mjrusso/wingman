@@ -25,7 +25,7 @@
 ;; Wingman brings Copilot-style ghost-text completions to Emacs via inline FIM
 ;; ("fill in middle") completions, powered by the llama.cpp server.
 ;;
-;; This package is a port of <https://github.com/ggml-org/wingman.vim>.
+;; This package is a port of <https://github.com/ggml-org/llama.vim>.
 
 ;;; Code:
 
