@@ -2,6 +2,13 @@
 #+author: Michael Russo
 #+language: en
 
+* Version 0.4 (2025-07-08)
+
+- Automatically disable in additional non-text and non-programming buffers by default
+- Add ~global-wingman-mode~
+- Add ~Package-Version~ metadata comment
+- Add ~wingman-version~ constant
+
 * Version 0.3 (2025-07-03)
 
 - Improve quality of completions:
