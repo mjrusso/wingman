@@ -4,6 +4,8 @@
 
 ;; Author: Michael Russo
 ;; URL: https://github.com/mjrusso/wingman
+
+;; Package-Version: 0.4
 ;; Package-Requires: ((emacs "27.1") (request "0.3.2") (dash "2.19.0"))
 
 
