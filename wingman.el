@@ -6,7 +6,7 @@
 ;; URL: https://github.com/mjrusso/wingman
 
 ;; Package-Version: 0.4
-;; Package-Requires: ((emacs "27.1") (request "0.3.2") (dash "2.19.0") (gptel "0.9.8.5") (transient "0.9.3"))
+;; Package-Requires: ((emacs "27.1") (compat "29.1") (dash "2.19.0") (request "0.3.2") (gptel "0.9.8.5") (transient "0.9.3"))
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
