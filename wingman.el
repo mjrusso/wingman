@@ -159,6 +159,12 @@ Example:
 
 (defcustom wingman-ring-n-chunks 16 "Maximum extra chunks." :type 'integer)
 (defcustom wingman-ring-chunk-size 64 "Lines per chunk." :type 'integer)
+(defcustom wingman-ring-max-line-length 1000
+  "Maximum length of individual lines stored in the ring buffer.
+Lines longer than this will be truncated and a warning will be logged.
+Set to nil to disable line length limiting."
+  :type '(choice (const :tag "No limit" nil) integer)
+  :group 'wingman)
 (defcustom wingman-ring-update-ms 1000 "Background update cadence." :type 'integer)
 
 (defgroup wingman-debug nil
@@ -387,6 +393,19 @@ enabled, and only if it may be enabled as determined by `wingman-disable-predica
         (dolist (ch (string-to-list (match-string 1 string)) spaces)
           (setq spaces (+ spaces (if (eq ch ?\t) (- tab-width (mod spaces tab-width)) 1)))))
     0))
+
+(defun wingman--truncate-line (line)
+  "Truncate LINE to `wingman-ring-max-line-length' if it exceeds the limit.
+Log a warning if truncation occurs. Return the potentially truncated line."
+  (if (and wingman-ring-max-line-length
+           (> (length line) wingman-ring-max-line-length))
+      (progn
+        (wingman--log 1 "Ring buffer: truncating line from %d to %d chars: %s..."
+                      (length line)
+                      wingman-ring-max-line-length
+                      (truncate-string-to-width line 50 nil nil t))
+        (substring line 0 wingman-ring-max-line-length))
+    line))
 
 (defun wingman--collect-local-context (&optional prev)
   "Return an alist (prefix middle suffix indent line-prefix line-suffix line-full)."
@@ -772,7 +791,8 @@ filtering is performed."
                        (min (line-number-at-pos (point-max))
                             (+ (line-number-at-pos) (/ wingman-ring-chunk-size 2))))
                     (wingman--buffer-lines 1 (line-number-at-pos (point-max)))))
-           (chunk (wingman--random-chunk lines))
+           (truncated-lines (mapcar #'wingman--truncate-line lines))
+           (chunk (wingman--random-chunk truncated-lines))
            (chunk-str (concat (string-join chunk "\n") "\n"))
            (project-root (when-let ((proj (project-current)))
                            (project-root proj)))

@@ -67,6 +67,18 @@ This prevents tests from being noisy and allows asserting on logged output."
     (should (= (wingman--indent-of "  \thello") 8)) ; 2 spaces, then tab aligns to col 8
     (should (= (wingman--indent-of "") 0))))
 
+(ert-deftest test-wingman--truncate-line ()
+  "Test line truncation functionality."
+  (let ((wingman-ring-max-line-length 10)
+        (wingman-log-level 0))
+    (should (string-equal (wingman--truncate-line "short") "short"))
+    (should (string-equal (wingman--truncate-line "this is a very long line that should be truncated")
+                          "this is a "))
+    (should (= (length (wingman--truncate-line "this is a very long line that should be truncated")) 10)))
+  (let ((wingman-ring-max-line-length nil))
+    (should (string-equal (wingman--truncate-line "this line should not be truncated regardless of length")
+                          "this line should not be truncated regardless of length"))))
+
 (ert-deftest test-wingman--string-common-prefix ()
   "Test string common prefix function."
   (should (string-equal (wingman--string-common-prefix "hello" "help") "hel"))
