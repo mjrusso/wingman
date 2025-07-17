@@ -3,7 +3,7 @@ EMACS ?= emacs
 SOURCE = wingman.el
 TESTS = wingman-tests.el
 
-DEPS = compat dash request transient
+DEPS = compat dash request transient gptel
 
 INIT_PACKAGES := "(progn \
   (require 'package) \
