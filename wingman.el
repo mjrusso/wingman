@@ -1291,9 +1291,17 @@ suffix like '-mode' or '-ts-mode'."
 (defun wingman--build-emulated-fim-model-groups (_children)
   "Generate a dynamic list of columns for gptel backends."
   (let ((available-keys (number-sequence ?a ?z))
-        (all-columns '()))
+        (all-columns '())
+        (backends gptel--known-backends))
 
-    (dolist (backend-pair gptel--known-backends)
+    ;; Move the default gptel backend to the front of the list.
+    (when-let* ((default-backend-obj (if (symbolp gptel-backend)
+                                         (cdr (assoc gptel-backend backends))
+                                       gptel-backend))
+                (default-backend-pair (rassoc default-backend-obj backends)))
+      (setq backends (cons default-backend-pair (remove default-backend-pair backends))))
+
+    (dolist (backend-pair backends)
       (let* ((backend-name (car backend-pair))
              (backend-object (cdr backend-pair))
              (models (gptel-backend-models backend-object))
