@@ -1218,8 +1218,9 @@ suffix like '-mode' or '-ts-mode'."
             (cond
              ((stringp response)
               (let ((cleaned-response (string-trim response)))
-                ;; Remove markdown code fences if they exist.
-                (when (string-match "^```\\(?:\\w+\\)?\n\\(.*\\)\n```$" cleaned-response)
+                ;; Remove markdown code fences if they exist. (This regex handles
+                ;; multiline content and optional newlines around the fences.)
+                (when (string-match "^```\\(?:\\w+\\)?\n?\\(\\(?:.\\|\n\\)*?\\)\n?```\\s-*$" cleaned-response)
                   (setq cleaned-response (match-string 1 cleaned-response)))
 
                 (wingman--gptel-render cleaned-response origin-buffer)
