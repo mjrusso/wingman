@@ -1266,6 +1266,22 @@ suffix like '-mode' or '-ts-mode'."
     (message "Wingman: Requesting completion from %s (%s)..."
              backend-name model)))
 
+(defun wingman--safe-filename (filename)
+  "Return a privacy-safe version of FILENAME for sending to third-party providers.
+Prefers project-relative paths when available, otherwise uses abbreviated paths.
+This prevents leaking the user's name, which may be part of the file path."
+  (cond
+   ((or (null filename) (string-empty-p filename))
+    "unnamed")
+   ((project-current)
+    (let* ((project-root (project-root (project-current)))
+           (relative-path (file-relative-name filename project-root)))
+      (if (string-prefix-p "../" relative-path)
+          (file-name-nondirectory filename)
+        relative-path)))
+   (t
+    (abbreviate-file-name filename))))
+
 (defun wingman--build-emulated-fim-prompt (ctx)
   "Build the prompt string for gptel from wingman context CTX."
   (let* ((pre (alist-get 'prefix ctx))
@@ -1278,7 +1294,7 @@ suffix like '-mode' or '-ts-mode'."
               (let ((context-chunks
                      (mapcar (lambda (chunk)
                                (format "--- From: `%s` ---\n```\n%s\n```"
-                                       (alist-get 'filename chunk)
+                                       (wingman--safe-filename (alist-get 'filename chunk))
                                        (alist-get 'text chunk)))
                              extra-ctx)))
                 (format "### Context from Recently Accessed Files\n\nHere is some context based on files that the user has recently accessed while editing code. This may or may not be relevant to the current completion task:\n\n%s\n\n"

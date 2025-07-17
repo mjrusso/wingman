@@ -162,6 +162,163 @@ This prevents tests from being noisy and allows asserting on logged output."
     ;; chunk3 should remain as its similarity is 0
     (should (member chunk3 wingman--ring-chunks))))
 
+(ert-deftest test-wingman--safe-filename ()
+  "Test privacy-safe filename generation."
+
+  (let ((project-current-result nil))
+    (cl-letf (((symbol-function 'project-current) (lambda () project-current-result)))
+      (should (string-equal
+               (wingman--safe-filename "/Users/foo/Documents/test.py")
+               (abbreviate-file-name "/Users/foo/Documents/test.py")))
+
+      (should (string-equal (wingman--safe-filename nil) "unnamed"))
+
+      (should (string-equal (wingman--safe-filename "") "unnamed"))))
+
+  (let* ((mock-project (list 'vc "/home/user/myproject/"))
+         (project-root "/home/user/myproject/"))
+    (cl-letf (((symbol-function 'project-current) (lambda () mock-project))
+              ((symbol-function 'project-root) (lambda (_) project-root)))
+
+      (should (string-equal
+               (wingman--safe-filename "/home/user/myproject/src/main.py")
+               "src/main.py"))
+
+      (should (string-equal
+               (wingman--safe-filename "/home/user/myproject/README.md")
+               "README.md"))
+
+      (should (string-equal
+               (wingman--safe-filename "/home/user/other/file.py")
+               "file.py"))
+
+      (should (string-equal
+               (wingman--safe-filename "/home/user/file.py")
+               "file.py"))))
+
+  (let* ((mock-project (list 'vc "/home/user/projects/myapp/"))
+         (project-root "/home/user/projects/myapp/"))
+    (cl-letf (((symbol-function 'project-current) (lambda () mock-project))
+              ((symbol-function 'project-root) (lambda (_) project-root)))
+
+      (should (string-equal
+               (wingman--safe-filename "/home/user/projects/myapp/src/components/ui/button.tsx")
+               "src/components/ui/button.tsx"))
+
+      (should (string-equal
+               (wingman--safe-filename "/home/user/myapp/test.py")
+               "test.py")))))
+
+(ert-deftest test-wingman--safe-filename-with-buffer-names ()
+  "Test safe filename with buffer names (non-file buffers)."
+
+  (should (string-equal (wingman--safe-filename "*scratch*") "*scratch*"))
+  (should (string-equal (wingman--safe-filename "*Messages*") "*Messages*"))
+
+  (let ((project-current-result nil))
+    (cl-letf (((symbol-function 'project-current) (lambda () project-current-result)))
+      (should (string-equal
+               (wingman--safe-filename "*temp-buffer*")
+               "*temp-buffer*")))))
+
+(ert-deftest test-wingman--build-emulated-fim-prompt-with-safe-filenames ()
+  "Test that the emulated FIM prompt uses safe filenames."
+
+  (let* ((mock-project (list 'vc "/home/user/myproject/"))
+         (project-root "/home/user/myproject/")
+         (major-mode 'python-mode)
+         (ctx '((prefix . "def hello():\n    ")
+                (middle . "print")
+                (suffix . "\n    return 'world'")))
+         (mock-extra-context
+          (vector
+           `((text . "import os\ndef util():\n    pass")
+             (filename . "/home/user/myproject/src/utils.py")
+             (time . 1234567890.0))
+           `((text . "# Configuration\nDEBUG = True")
+             (filename . "/home/user/other/config.py")
+             (time . 1234567891.0)))))
+
+    (cl-letf (((symbol-function 'project-current) (lambda () mock-project))
+              ((symbol-function 'project-root) (lambda (_) project-root))
+              ((symbol-function 'wingman--extra-context) (lambda (_) mock-extra-context))
+              ((symbol-function 'wingman--lang-from-major-mode) (lambda (_) "python")))
+
+      (let ((prompt (wingman--build-emulated-fim-prompt ctx)))
+        ;; Should contain project-relative path for file within project
+        (should (string-match-p "src/utils.py" prompt))
+        ;; Should contain just filename for file outside project
+        (should (string-match-p "config.py" prompt))
+        ;; Should NOT contain full paths
+        (should-not (string-match-p "/home/user/myproject/src/utils.py" prompt))
+        (should-not (string-match-p "/home/user/other/config.py" prompt))))))
+
+(ert-deftest test-wingman--build-emulated-fim-prompt-no-context ()
+  "Test emulated FIM prompt generation with no extra context."
+
+  (let* ((major-mode 'javascript-mode)
+         (ctx '((prefix . "function test() {\n    ")
+                (middle . "console")
+                (suffix . "\n}"))))
+
+    (cl-letf (((symbol-function 'wingman--extra-context) (lambda (_) []))
+              ((symbol-function 'wingman--lang-from-major-mode) (lambda (_) "javascript")))
+
+      (let ((prompt (wingman--build-emulated-fim-prompt ctx)))
+        ;; Should not contain context section
+        (should-not (string-match-p "Context from Recently Accessed Files" prompt))
+        ;; Should contain the basic FIM structure
+        (should (string-match-p "function test() {" prompt))
+        (should (string-match-p "console<FIM_MARKER>" prompt))
+        (should (string-match-p "javascript" prompt))))))
+
+(ert-deftest test-wingman--build-emulated-fim-prompt-with-home-abbreviation ()
+  "Test that files are properly abbreviated with ~ when no project context."
+
+  (let* ((major-mode 'python-mode)
+         (ctx '((prefix . "# Test\n")
+                (middle . "import")
+                (suffix . "\nprint('hello')")))
+         (mock-extra-context
+          (vector
+           `((text . "def helper():\n    pass")
+             (filename . "/Users/john/Documents/helper.py")
+             (time . 1234567890.0)))))
+
+    (cl-letf (((symbol-function 'project-current) (lambda () nil))
+              ((symbol-function 'wingman--extra-context) (lambda (_) mock-extra-context))
+              ((symbol-function 'wingman--lang-from-major-mode) (lambda (_) "python"))
+              ((symbol-function 'abbreviate-file-name)
+               (lambda (filename)
+                 (if (string-prefix-p "/Users/john/" filename)
+                     (concat "~/" (substring filename 12))
+                   filename))))
+
+      (let ((prompt (wingman--build-emulated-fim-prompt ctx)))
+        ;; Should contain abbreviated path
+        (should (string-match-p "~/Documents/helper.py" prompt))
+        ;; Should NOT contain full path
+        (should-not (string-match-p "/Users/john/Documents/helper.py" prompt))))))
+
+(ert-deftest test-wingman--safe-filename-integration ()
+  "Integration test for safe filename in context of actual chunk creation."
+
+  (let* ((mock-project (list 'vc "/workspace/myapp/"))
+         (project-root "/workspace/myapp/")
+         (test-chunk (make-wingman--chunk
+                      :data '("function test() {" "  return 42;" "}")
+                      :filename "/workspace/myapp/src/main.js"
+                      :timestamp 1234567890.0
+                      :project-root project-root)))
+
+    (cl-letf (((symbol-function 'project-current) (lambda () mock-project))
+              ((symbol-function 'project-root) (lambda (_) project-root)))
+
+      ;; Test that chunk filename gets properly sanitized
+      (let ((safe-name (wingman--safe-filename (wingman--chunk-filename test-chunk))))
+        (should (string-equal safe-name "src/main.js"))
+        (should-not (string-match-p "/workspace/" safe-name))))))
+
 (ert-deftest test-wingman-version-constant ()
   "Test that version constant is defined and valid."
   (should (boundp 'wingman-version))
