@@ -212,14 +212,13 @@ This prevents tests from being noisy and allows asserting on logged output."
 (ert-deftest test-wingman--safe-filename-with-buffer-names ()
   "Test safe filename with buffer names (non-file buffers)."
 
-  (should (string-equal (wingman--safe-filename "*scratch*") "*scratch*"))
-  (should (string-equal (wingman--safe-filename "*Messages*") "*Messages*"))
-
-  (let ((project-current-result nil))
-    (cl-letf (((symbol-function 'project-current) (lambda () project-current-result)))
-      (should (string-equal
-               (wingman--safe-filename "*temp-buffer*")
-               "*temp-buffer*")))))
+  ;; Mock `project-current' to return nil to ensure these tests are not
+  ;; affected by the environment. This correctly simulates the behaviour for
+  ;; non-file-backed buffers.
+  (cl-letf (((symbol-function 'project-current) (lambda () nil)))
+    (should (string-equal (wingman--safe-filename "*scratch*") "*scratch*"))
+    (should (string-equal (wingman--safe-filename "*Messages*") "*Messages*"))
+    (should (string-equal (wingman--safe-filename "*temp-buffer*") "*temp-buffer*"))))
 
 (ert-deftest test-wingman--build-emulated-fim-prompt-with-safe-filenames ()
   "Test that the emulated FIM prompt uses safe filenames."
