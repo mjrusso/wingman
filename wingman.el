@@ -6,8 +6,7 @@
 ;; URL: https://github.com/mjrusso/wingman
 
 ;; Package-Version: 0.4
-;; Package-Requires: ((emacs "27.1") (compat "29.1") (request "0.3.2") (dash "2.19.0"))
-
+;; Package-Requires: ((emacs "27.1") (compat "29.1") (dash "2.19.0") (request "0.3.2") (gptel "0.9.8.5") (transient "0.9.3"))
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -25,20 +24,49 @@
 ;;; Commentary:
 
 ;; Wingman brings Copilot-style ghost-text completions to Emacs via inline FIM
-;; ("fill in middle") completions, powered by the llama.cpp server.
+;; ("fill-in-the-middle") completions, supporting both native FIM and
+;; "emulated" FIM endpoints.
+;;
+;; This package provides two distinct completion modes:
+;;
+;; 1. Native FIM: Leverages llama.cpp's specialized `/infill` endpoint for
+;;    fast, efficient completions with models that are specifically trained for
+;;    fill-in-the-middle completions. By default (unless explicitly disabled by
+;;    customizing `wingman-auto-fim'), native FIM completions are automatically
+;;    requested while typing, but can also be manually requested by invoking
+;;    the `wingman-fim' command.
+;;
+;; 2. Emulated FIM: Simulates FIM behaviour via prompting using standard LLM
+;;    completion endpoints. The gptel package does the heavy lifting of
+;;    integrating with inference providers. This method is generally slower
+;;    than native FIM but enables access to a broader range of models. Unlike
+;;    native FIM, the emulated FIM completion requests are never made
+;;    automatically while typing (and instead must always be manually
+;;    requested, by invoking the `wingman-fim-emulated' command).
+;;
+;; Both modes display completions as inline ghost text that can be accepted
+;; in full, by line, or by word using keyboard shortcuts.
 ;;
 ;; This package is a port of <https://github.com/ggml-org/llama.vim>.
+;;
+;; Also see:
+;;
+;; - llama.cpp: <https://github.com/ggml-org/llama.cpp>
+;; - gptel: <https://github.com/karthink/gptel/>
 
 ;;; Code:
 
 (defconst wingman-version "0.4")
 
+(require 'cl-lib)
 (require 'dash)
 (require 'json)
 (require 'project)
 (require 'request)
 (require 'seq)
 (require 'subr-x)
+(require 'gptel)
+(require 'transient)
 
 (defgroup wingman nil
   "Inline code and text completions using the llama.cpp server."
@@ -131,6 +159,12 @@ Example:
 
 (defcustom wingman-ring-n-chunks 16 "Maximum extra chunks." :type 'integer)
 (defcustom wingman-ring-chunk-size 64 "Lines per chunk." :type 'integer)
+(defcustom wingman-ring-max-line-length 1000
+  "Maximum length of individual lines stored in the ring buffer.
+Lines longer than this will be truncated and a warning will be logged.
+Set to nil to disable line length limiting."
+  :type '(choice (const :tag "No limit" nil) integer)
+  :group 'wingman)
 (defcustom wingman-ring-update-ms 1000 "Background update cadence." :type 'integer)
 
 (defgroup wingman-debug nil
@@ -167,6 +201,63 @@ Example:
           (forward-line (- (count-lines (point-min) (point-max))
                            wingman-log-max-lines))
           (delete-region (point-min) (point)))))))
+
+(defvar wingman--major-mode-language-alist
+  '((c++-mode . "cpp")
+    (c-mode . "c")
+    (caml-mode . "ocaml")
+    (cperl-mode . "perl")
+    (clojure-mode . "clojure")
+    (clojurescript-mode . "clojurescript")
+    (coffee-mode . "coffeescript")
+    (cuda-mode . "cuda-cpp")
+    (docker-compose-mode . "dockercompose")
+    (elixir-mode . "elixir")
+    (emacs-lisp-mode . "elisp")
+    (enh-ruby-mode . "ruby")
+    (ess-r-mode . "r")
+    (go-mode . "go")
+    (java-mode . "java")
+    (js-mode . "javascript")
+    (js2-jsx-mode . "javascriptreact")
+    (js2-mode . "javascript")
+    (less-css-mode . "less")
+    (markdown-mode . "markdown")
+    (nxml-mode . "xml")
+    (objc-mode . "objective-c")
+    (org-mode . "org")
+    (python-mode . "python")
+    (R-mode . "r")
+    (rjsx-mode . "typescriptreact")
+    (ruby-mode . "ruby")
+    (rust-mode . "rust")
+    (rustic-mode . "rust")
+    (sh-mode . "shellscript")
+    (shell-script-mode . "shellscript")
+    (swift-mode . "swift")
+    (text-mode . "plaintext")
+    (tuareg-mode . "ocaml")
+    (typescript-mode . "typescript")
+    (typescript-tsx-mode . "typescriptreact")
+    (visual-basic-mode . "vb")
+    (xml-mode . "xml"))
+  "An association list mapping major-mode symbols to their language identifiers.
+
+The function `wingman--lang-from-major-mode` uses this list to
+find the language string for a given major mode. If the mode is
+not found in this list, a fallback mechanism is used where the
+suffixes \"-mode\" and \"-ts-mode\" are stripped from the mode's
+symbol name to guess the language identifier.
+
+For example, if `some-new-mode` is not in this list, the fallback
+will produce \"some-new\".
+
+You can add mappings to this list to support new modes or to override
+the default fallback behaviour. For example, to add support for
+SomeNewLang, add the following to your Emacs configuration:
+
+(add-to-list 'wingman--major-mode-language-alist
+             '(some-new-lang-mode . \"somenewlang\"))")
 
 (cl-defstruct wingman--chunk data string timestamp filename project-root)
 
@@ -227,8 +318,9 @@ Example:
 (defvar-keymap wingman-mode-prefix-map
   :doc "Local map for wingman-mode. Will be prefixed by `wingman-prefix-key' in
 the `wingman-mode-map' map."
-  "TAB" #'wingman-fim-inline
-  "d" #'wingman-debug-completion)
+  "TAB" #'wingman-fim
+  "S-TAB" #'wingman-fim-emulated
+  "d" #'wingman-fim-debug)
 
 (defvar wingman-mode-map
   (let ((map (make-sparse-keymap)))
@@ -302,6 +394,19 @@ enabled, and only if it may be enabled as determined by `wingman-disable-predica
           (setq spaces (+ spaces (if (eq ch ?\t) (- tab-width (mod spaces tab-width)) 1)))))
     0))
 
+(defun wingman--truncate-line (line)
+  "Truncate LINE to `wingman-ring-max-line-length' if it exceeds the limit.
+Log a warning if truncation occurs. Return the potentially truncated line."
+  (if (and wingman-ring-max-line-length
+           (> (length line) wingman-ring-max-line-length))
+      (progn
+        (wingman--log 1 "Ring buffer: truncating line from %d to %d chars: %s..."
+                      (length line)
+                      wingman-ring-max-line-length
+                      (truncate-string-to-width line 50 nil nil t))
+        (substring line 0 wingman-ring-max-line-length))
+    line))
+
 (defun wingman--collect-local-context (&optional prev)
   "Return an alist (prefix middle suffix indent line-prefix line-suffix line-full)."
   (save-excursion
@@ -356,10 +461,10 @@ enabled, and only if it may be enabled as determined by `wingman-disable-predica
         (let ((end (line-end-position)))
           (split-string (buffer-substring-no-properties beg end) "\n"))))))
 
-(defun wingman-fim-inline ()
-  "Manual trigger key. Hides an existing hint, or fetches a new one."
+(defun wingman-fim ()
+  "Manual trigger key. Hides an existing hint, or fetches a new one using the server's native FIM endpoint."
   (interactive)
-  (wingman--log 4 "wingman-fim-inline called")
+  (wingman--log 4 "wingman-fim called")
   (if (overlayp wingman--hint-overlay)
       (progn
         (wingman--log 3 "Hiding existing overlay")
@@ -367,6 +472,9 @@ enabled, and only if it may be enabled as determined by `wingman-disable-predica
     (progn
       (wingman--log 3 "No existing overlay, requesting FIM")
       (wingman--fim nil))))
+
+(defalias 'wingman-fim-inline 'wingman-fim)
+(make-obsolete 'wingman-fim-inline 'wingman-fim "1.0")
 
 (defun wingman--on-point-move ()
   "Hide hint on movement; possibly auto-trigger a new one."
@@ -683,7 +791,8 @@ filtering is performed."
                        (min (line-number-at-pos (point-max))
                             (+ (line-number-at-pos) (/ wingman-ring-chunk-size 2))))
                     (wingman--buffer-lines 1 (line-number-at-pos (point-max)))))
-           (chunk (wingman--random-chunk lines))
+           (truncated-lines (mapcar #'wingman--truncate-line lines))
+           (chunk (wingman--random-chunk truncated-lines))
            (chunk-str (concat (string-join chunk "\n") "\n"))
            (project-root (when-let ((proj (project-current)))
                            (project-root proj)))
@@ -840,7 +949,7 @@ filtering is performed."
              (split-string text "\n")
              "\n"))
 
-(defun wingman-debug-completion ()
+(defun wingman-fim-debug ()
   "Generate elisp code in a temp buffer for debugging completion requests."
   (interactive)
   (let* ((ctx (wingman--collect-local-context))
@@ -1023,6 +1132,256 @@ filtering is performed."
             (eval-buffer)
           (error
            (message "Debug evaluation failed: %S" err)))))))
+
+(defalias 'wingman-debug-completion 'wingman-fim-debug)
+(make-obsolete 'wingman-debug-completion 'wingman-fim-debug "1.0")
+
+(defun wingman--lang-from-major-mode (mode)
+  "Return the language identifier string for the given MODE symbol.
+
+First, this function checks `wingman--major-mode-language-alist`
+for an explicit mapping. If one is not found, it falls back to
+deriving the language from the mode's name by removing a common
+suffix like '-mode' or '-ts-mode'."
+  (or (cdr (assoc mode wingman--major-mode-language-alist))
+      (let ((mode-name (symbol-name mode)))
+        (replace-regexp-in-string "\\(-ts\\)?-mode$" "" mode-name))))
+
+(defun wingman--gptel-render (completion-text buf)
+  "Display COMPLETION-TEXT as ghost text overlay in BUF."
+  (cl-block wingman--gptel-render
+    (let ((content-lines (split-string (string-trim completion-text) "\n")))
+      (while (and content-lines (string-empty-p (car (last content-lines))))
+        (setq content-lines (butlast content-lines)))
+
+      (when (or (null content-lines)
+                (and (= (length content-lines) 1)
+                     (string-empty-p (car content-lines))))
+        (wingman--log 3 "Received empty or no content from LLM. Aborting render.")
+        (cl-return-from wingman--gptel-render))
+
+      (wingman-hide)
+
+      (with-current-buffer buf
+        (let* ((pos (point))
+               (current-suffix (buffer-substring-no-properties pos (line-end-position)))
+               (first-line (car content-lines))
+               (remaining-lines (cdr content-lines))
+               (accept-content-lines (copy-sequence content-lines))
+               (common-prefix (wingman--string-common-prefix first-line current-suffix))
+               (display-first-line (substring first-line (length common-prefix)))
+               (first-ov (make-overlay pos pos buf))
+               (multi-ov (when remaining-lines (make-overlay pos pos buf))))
+
+          (when (or (not (string-empty-p display-first-line)) remaining-lines)
+            (wingman--log 2 "Rendering hint (emulated FIM): %s... (%d lines)"
+                          (truncate-string-to-width (car content-lines) 50)
+                          (length content-lines))
+
+            (when (and accept-content-lines (not (string-empty-p current-suffix)))
+              (setcar (last accept-content-lines)
+                      (concat (car (last accept-content-lines)) current-suffix)))
+
+            (overlay-put first-ov 'after-string (propertize display-first-line 'face 'wingman-overlay-face))
+            (overlay-put first-ov 'wingman t)
+            (setq wingman--hint-overlay first-ov)
+
+            (when multi-ov
+              (let ((multi-display
+                     (concat "\n"
+                             (mapconcat (lambda (line) (propertize line 'face 'wingman-overlay-face))
+                                        remaining-lines
+                                        "\n"))))
+                (overlay-put multi-ov 'after-string multi-display)
+                (overlay-put multi-ov 'wingman t)
+                (setq wingman--info-overlay multi-ov)))
+            (setq wingman--content-lines accept-content-lines)
+            (set-transient-map wingman-mode-completion-transient-map t)))))))
+
+(defun wingman--gptel-fim-request (backend-name model prompt)
+  "Send a completion request using gptel with BACKEND-NAME, MODEL, and PROMPT."
+  (let* ((backend-object (cdr (assoc backend-name gptel--known-backends)))
+         (gptel-backend backend-object)
+         (gptel-model model)
+         (gptel-stream nil)
+         (gptel-use-tools nil)
+         (gptel-track-response nil)
+         (gptel-log-level 'debug)
+         (gptel--system-message
+          "You are an expert programmer. Complete the code at the cursor position. Return only the code completion without explanations, markdown formatting, or code fences.")
+         (start-marker (point-marker)))
+
+    (wingman--log 2 "Sending completion request to %s via gptel-request (%s)"
+                  backend-name model)
+
+    (wingman--log 4 "Full prompt (%d chars): %s\n\n"
+                  (length prompt)
+                  (if (> (length prompt) 1000)
+                      (concat (substring prompt 0 500)
+                              "\n[... truncated "
+                              (number-to-string (- (length prompt) 1000))
+                              " chars ...]\n"
+                              (substring prompt -500))
+                    prompt))
+
+    (unless backend-object
+      (user-error "Wingman: Unknown backend '%s' for completion request" backend-name))
+
+    (gptel-request prompt
+      :buffer (current-buffer)
+      :position start-marker
+      :callback
+      (lambda (response info)
+        (let ((origin-buffer (plist-get info :buffer)))
+          (with-current-buffer origin-buffer
+            (goto-char (plist-get info :position))
+            (cond
+             ((stringp response)
+              (let ((cleaned-response (string-trim response)))
+                ;; Remove markdown code fences if they exist. (This regex handles
+                ;; multiline content and optional newlines around the fences.)
+                (when (string-match "^```\\(?:\\w+\\)?\n?\\(\\(?:.\\|\n\\)*?\\)\n?```\\s-*$" cleaned-response)
+                  (setq cleaned-response (match-string 1 cleaned-response)))
+
+                (wingman--gptel-render cleaned-response origin-buffer)
+                (message "Wingman: Completion available. Use TAB/S-TAB to accept.")))
+
+             ((eq response 'abort)
+              (message "Wingman: Completion aborted"))
+
+             ((null response)
+              (let ((status (plist-get info :status))
+                    (error-data (plist-get info :error)))
+                (message "Debug: HTTP Status: %s" status)
+                (message "Debug: Error data: %s" error-data)
+                (message "Debug: Full info: %s" info)
+                (message "Wingman: Completion failed - %s" (or status "Unknown error"))))
+
+             (t
+              (message "Debug: Unexpected response type: %s" response)
+              (message "Wingman: Unexpected response type"))))))
+
+      :context (list :inline-completion t))
+
+    (message "Wingman: Requesting completion from %s (%s)..."
+             backend-name model)))
+
+(defun wingman--safe-filename (filename)
+  "Return a privacy-safe version of FILENAME for sending to third-party providers.
+Prefers project-relative paths when available, otherwise uses abbreviated paths.
+This prevents leaking the user's name, which may be part of the file path."
+  (cond
+   ((or (null filename) (string-empty-p filename))
+    "unnamed")
+   ((project-current)
+    (let* ((project-root (project-root (project-current)))
+           (relative-path (file-relative-name filename project-root)))
+      (if (string-prefix-p "../" relative-path)
+          (file-name-nondirectory filename)
+        relative-path)))
+   (t
+    (abbreviate-file-name filename))))
+
+(defun wingman--build-emulated-fim-prompt (ctx)
+  "Build the prompt string for gptel from wingman context CTX."
+  (let* ((pre (alist-get 'prefix ctx))
+         (mid (alist-get 'middle ctx))
+         (suf (alist-get 'suffix ctx))
+         (extra-ctx (wingman--extra-context ctx))
+         (lang (wingman--lang-from-major-mode major-mode))
+         (context-section
+          (if (and extra-ctx (> (length extra-ctx) 0))
+              (let ((context-chunks
+                     (mapcar (lambda (chunk)
+                               (format "--- From: `%s` ---\n```\n%s\n```"
+                                       (wingman--safe-filename (alist-get 'filename chunk))
+                                       (alist-get 'text chunk)))
+                             extra-ctx)))
+                (format "### Context from Recently Accessed Files\n\nHere is some context based on files that the user has recently accessed while editing code. This may or may not be relevant to the current completion task:\n\n%s\n\n"
+                        (string-join context-chunks "\n\n")))
+            "")))
+
+    (format "%sYour task is to fill in the code at the position marked by `<FIM_MARKER>`. Provide only the code that should be inserted at that position, without any surrounding text, explanations, or markdown code blocks.\n\n### File to Complete\n\nHere is the code to complete. It is written in %s:\n\n```%s\n%s%s<FIM_MARKER>%s\n```"
+            context-section
+            lang
+            lang
+            pre
+            mid
+            suf)))
+
+(defclass wingman-emulated-fim-model-suffix (transient-suffix)
+  ((backend :initarg :backend)
+   (model :initarg :model)))
+
+(transient-define-suffix wingman-emulated-fim-complete-with-model ()
+  "Select the model from the transient menu and perform the completion request."
+  :class 'wingman-emulated-fim-model-suffix
+  :transient nil
+  (interactive)
+  (let* ((suffix-obj (transient-suffix-object))
+         (backend-name (oref suffix-obj :backend))
+         (model (oref suffix-obj :model))
+         (prompt (transient-scope 'wingman-emulated-fim-model-menu)))
+    (wingman--gptel-fim-request backend-name model prompt)))
+
+(defun wingman--build-emulated-fim-model-groups (_children)
+  "Generate a dynamic list of columns for gptel backends."
+  (let ((available-keys (number-sequence ?a ?z))
+        (all-columns '())
+        (backends gptel--known-backends))
+
+    ;; Move the default gptel backend to the front of the list.
+    (when-let* ((default-backend-obj (if (symbolp gptel-backend)
+                                         (cdr (assoc gptel-backend backends))
+                                       gptel-backend))
+                (default-backend-pair (rassoc default-backend-obj backends)))
+      (setq backends (cons default-backend-pair (remove default-backend-pair backends))))
+
+    (dolist (backend-pair backends)
+      (let* ((backend-name (car backend-pair))
+             (backend-object (cdr backend-pair))
+             (models (gptel-backend-models backend-object))
+             (model-suffixes '()))
+
+        (dolist (model models)
+          (when available-keys
+            (let ((key (char-to-string (pop available-keys))))
+              (push (cons 'wingman-emulated-fim-model-suffix
+                          `(:key ,key
+                                 :description ,(symbol-name model)
+                                 :command wingman-emulated-fim-complete-with-model
+                                 :backend ,backend-name
+                                 :model ,model))
+                    model-suffixes))))
+        (when model-suffixes
+          (push (vector 'transient-column
+                        `(:description ,(capitalize (format "%s" backend-name)))
+                        (nreverse model-suffixes))
+                all-columns))))
+    (seq-filter #'identity (nreverse all-columns))))
+
+(transient-define-prefix wingman-emulated-fim-model-menu ()
+  "Transient menu to select a gptel model for completion."
+  [:class transient-columns
+          :setup-children (lambda (children)
+                            (wingman--build-emulated-fim-model-groups children))
+          []])
+
+(defun wingman-fim-emulated ()
+  "Request an inline completion by emulating FIM behaviour using standard LLM completion endpoints.
+This command provides access to a broader range of LLMs that do not have
+native FIM capability. This method constructs a special prompt to guide the
+model and is generally slower than the native `wingman-fim` command."
+  (interactive)
+
+  (wingman--log 4 "wingman-fim-emulated called")
+  (if (overlayp wingman--hint-overlay)
+      (progn
+        (wingman--log 3 "Hiding existing overlay")
+        (wingman-hide)))
+  (let* ((ctx (wingman--collect-local-context))
+         (prompt (wingman--build-emulated-fim-prompt ctx)))
+    (transient-setup 'wingman-emulated-fim-model-menu nil nil :scope prompt)))
 
 (provide 'wingman)
 ;;; wingman.el ends here

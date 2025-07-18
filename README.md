@@ -1,15 +1,18 @@
 #  wingman.el - LLM-assisted text completion
 
-Wingman enables GitHub Copilot-style inline completions within Emacs, powered by a local (or remote) `llama.cpp` server.
+Wingman brings GitHub Copilot-style inline completions to Emacs, offering two powerful modes: fast, automatic completions via a local (or remote) [llama.cpp](https://github.com/ggml-org/llama.cpp) server, in addition to manual completions through any backend supported by [gptel](https://github.com/karthink/gptel).
 
-_This package is a direct port of the excellent [llama.vim plugin](https://github.com/ggml-org/llama.vim) (see [technical design details](https://github.com/ggml-org/llama.cpp/pull/9787) for more background on how this works)._
+_This package is, primarily, a direct port of the excellent [llama.vim plugin](https://github.com/ggml-org/llama.vim) (see [technical design details](https://github.com/ggml-org/llama.cpp/pull/9787) for more background on how this works)._
 
 ![logo](./assets/logo.png)
 
 ### Features
 
 * **Inline "Ghost Text" Completions:** Suggestions appear directly in your buffer as you type.
-* **Local First:** Works entirely with a self-hosted `llama.cpp` server, ensuring your code stays on your machine.
+* **Dual Completion Modes:**
+  - **Native FIM:** Fast, efficient completions via `llama.cpp`'s specialized `/infill` endpoint for "fill-in-the-middle" (FIM) models. By default, these completions appear automatically as you type.
+  - **Emulated FIM:** Access a broader range of models via `gptel`. These completions must always be manually triggered.
+* **Local First:** No code leaves your machine when using a self-hosted `llama.cpp` server with the _Native FIM_ completion model.
 * **Asynchronous by Default:** Never blocks your editing while waiting for a completion.
 * **Response Caching:** Repeated requests for the same context are answered instantly from an in-memory cache.
 * **Project-Aware Context:** Uses a ring buffer of text chunks from recently used files (scoped to the [current project](https://www.gnu.org/software/emacs/manual/html_node/emacs/Projects.html)) to provide more relevant suggestions.
@@ -18,14 +21,18 @@ _This package is a direct port of the excellent [llama.vim plugin](https://githu
 
 This package requires a running [llama.cpp](https://github.com/ggml-org/llama.cpp) server instance, accessible at `wingman-llama-endpoint`.
 
+Additionally, to use the _Emulated FIM_ completion mode, you must configure [gptel](https://github.com/karthink/gptel) accordingly for each LLM provider you intend to use.
+
 ## Installation
 
 ### With `use-package` and `straight.el`
 
 ```emacs-lisp
 (use-package wingman
-  :straight (:type git :host github :repo "mjrusso/wingman"))
+  :straight (:type git :host github :repo "mjrusso/wingman")
 ```
+
+Note that this package depends on [transient](https://github.com/magit/transient) and [gptel]((https://github.com/karthink/gptel)), which will be installed automatically if necessary.
 
 ### Manual Installation
 
@@ -35,12 +42,14 @@ Clone this repository:
 git clone https://github.com/mjrusso/wingman.git ~/.emacs.d/lisp/wingman
 ```
 
-Add then add the directory to your Emacs `load-path` in your `init.el`:
+Add then add the directory to your Emacs `load-path`:
 
 ```emacs-lisp
 (add-to-list 'load-path "~/.emacs.d/lisp/wingman")
-(require wingman)
+(require 'wingman)
 ```
+
+Note that dependencies ([transient](https://github.com/magit/transient) and [gptel]((https://github.com/karthink/gptel)) must also be manually installed in this case.
 
 ## Configuration
 
@@ -96,7 +105,10 @@ An example of a more advanced configuration:
 
   :bind
   (:map wingman-mode-prefix-map
-   ("TAB" . wingman-fim-inline)
+   ("TAB" . wingman-fim)              ; Request Native FIM
+   ("S-TAB" . wingman-fim-emulated)   ; Request Emulated FIM
+   ("d" . wingman-fim-debug))
+
    :map wingman-mode-completion-transient-map
    ("TAB" . wingman-accept-full)
    ("S-TAB" . wingman-accept-line)
@@ -106,17 +118,24 @@ An example of a more advanced configuration:
 ## Usage
 
 1. **Enable the mode:** `wingman-mode` is a buffer-local minor mode. You can enable it with `M-x wingman-mode`, or globally in all applicable buffers with `global-wingman-mode`. (Alternatively, you may enable `wingman-mode` automatically via the hook as shown in the configuration examples above.)
+
 2. **Get Completions:**
-   * If `wingman-auto-fim` is `t` (the default), completions will appear automatically as you type.
-   * To manually request a completion, use `wingman-fim-inline`. By default this is bound to `C-c w TAB` in the `wingman-mode-map`, and may be customized via `wingman-prefix-key` and `wingman-mode-prefix-map`.
+   * **Native FIM (`wingman-fim`):**
+     * If `wingman-auto-fim` is `t` (the default), completions will appear automatically as you type using the configured `llama.cpp` server.
+     * To manually request a completion from the configured `llama.cpp` server, use `M-x wingman-fim` (bound to `C-c w TAB` in the example config).
+   * **Emulated FIM (`wingman-fim-emulated`):****
+     * This is always triggered manually. Use `M-x wingman-fim-emulated` (bound to `C-c w S-TAB` in the example config).
+     * Once triggered, a `transient` menu will appear, letting you choose from your configured `gptel` backends and models. Select one to send the request.
+
 3. **Accept a Completion:**
    * **Full:** Press the "accept full" key (default: `<tab>`) to insert the entire suggestion.
    * **Line:** Press the "accept line" key (default: `S-TAB`) to insert only the first line of the suggestion.
    * **Word:** Press the "accept word" key (default: `M-S-TAB`) to insert only the first word.
+
 4. **Dismiss a Completion:**
    * Keep typing, or
    * Move the cursor, or
-   * Press the trigger key again
+   * Press the manual trigger key again.
 
 ## Appendix
 
@@ -161,6 +180,10 @@ Install from your preferred package manager, build from source, or use the [late
   ```
 
 Note that a [FIM ("fill-in-the-middle")-compatible model](https://huggingface.co/collections/ggml-org/llamavim-6720fece33898ac10544ecf9) is required.
+
+### gptel setup
+
+To use _Emulated FIM_ mode, configure `gptel` backends as per [the setup instructions](https://github.com/karthink/gptel?tab=readme-ov-file#setup).
 
 ## Acknowledgements
 

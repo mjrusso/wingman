@@ -2,6 +2,21 @@
 #+author: Michael Russo
 #+language: en
 
+* Unreleased
+
+- Add *"Emulated FIM"* completion mode:
+  - Manually invoke via new ~wingman-fim-emulated~ command
+    - When invoked, sends completion request to any provider configured via [[https://github.com/karthink/gptel][gptel]]
+    - Provides interactive [[https://github.com/magit/transient][transient]] menu for model selection
+
+- Rename existing "Native FIM" commands for clarity and consistency:
+  - Deprecate ~wingman-fim-inline~ command (use ~wingman-fim~ instead)
+  - Deprecate ~wingman-debug-completion~ command (use ~wingman-fim-debug~ instead)
+
+- Add ~wingman-ring-max-line-length~ variable, providing a configurable limit for the length of individual lines stored in the ring buffer
+
+- Introduce dependencies on the ~gptel~ and ~transient~ packages
+
 * Version 0.4 (2025-07-08)
 
 - Automatically disable in additional non-text and non-programming buffers by default
