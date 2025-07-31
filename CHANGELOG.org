@@ -2,7 +2,7 @@
 #+author: Michael Russo
 #+language: en
 
-* Unreleased
+* Version 0.5 (2025-07-31)
 
 - Add *"Emulated FIM"* completion mode:
   - Manually invoke via new ~wingman-fim-emulated~ command

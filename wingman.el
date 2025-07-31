@@ -5,7 +5,7 @@
 ;; Author: Michael Russo
 ;; URL: https://github.com/mjrusso/wingman
 
-;; Package-Version: 0.4
+;; Package-Version: 0.5
 ;; Package-Requires: ((emacs "27.1") (compat "29.1") (dash "2.19.0") (request "0.3.2") (gptel "0.9.8.5") (transient "0.9.3"))
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -56,7 +56,7 @@
 
 ;;; Code:
 
-(defconst wingman-version "0.4")
+(defconst wingman-version "0.5")
 
 (require 'cl-lib)
 (require 'dash)
