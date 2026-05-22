@@ -719,7 +719,12 @@ If POS-MARKER is non-nil, render at that marker position."
                   (setcar (last accept-content-lines)
                           (concat (car (last accept-content-lines)) current-suffix)))
 
-                (overlay-put first-ov 'after-string (propertize display-first-line 'face 'wingman-overlay-face))
+                (let* ((text display-first-line)
+                       (len (length text)))
+                  (put-text-property 0 1 'cursor len text)
+                  (put-text-property 0 len 'face 'wingman-overlay-face text))
+
+                (overlay-put first-ov 'after-string display-first-line)
                 (overlay-put first-ov 'wingman t)
                 (setq wingman--hint-overlay first-ov)
 
