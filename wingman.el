@@ -101,6 +101,10 @@
   "List of stop strings."
   :type '(repeat string))
 
+(defcustom wingman-model-name nil
+  "Model name to use for the request. If nil, the server will use its default model."
+  :type 'string)
+
 (defcustom wingman-auto-fim t
   "If non-nil, request a completion automatically while typing."
   :type 'boolean)
@@ -582,7 +586,9 @@ Log a warning if truncation occurs. Return the potentially truncated line."
                                   "timings/prompt_n"
                                   "timings/prompt_ms"
                                   "timings/predicted_n"
-                                  "timings/predicted_ms"])))
+                                  "timings/predicted_ms"])
+            ,@(when wingman-model-name
+                `(("model" . ,wingman-model-name)))))
          (url wingman-llama-endpoint)
          (headers (append '(("Content-Type" . "application/json"))
                           (when wingman-llama-api-key
@@ -874,7 +880,9 @@ If POS-MARKER is non-nil, render at that marker position."
                        ("prompt"       . "")
                        ("n_predict"    . 0)
                        ("stream" . :json-false)
-                       ("samplers" . [])))
+                       ("samplers" . [])
+                       ,@(when wingman-model-name
+                           `(("model" . wingman-model-name)))))
               :parser 'ignore
               :error (lambda (&rest _)
                        (message "wingman: background prime failed for project '%s'"
